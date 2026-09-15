@@ -1,0 +1,40 @@
+# Miscellaneous
+*.class
+*.log
+*.pyc
+*.swp
+.DS_Store
+.atom/
+.build/
+.buildlog/
+.history
+.svn/
+.swiftpm/
+migrate_working_dir/
+
+# IntelliJ related
+*.iml
+*.ipr
+*.iws
+.idea/
+
+# The .vscode folder contains launch configuration and tasks you configure in
+# VS Code which you may wish to be included in version control, so this line
+# is commented out by default.
+/.vscode/
+
+# Flutter/Dart/Pub related
+# Libraries should not include pubspec.lock, per https://dart.dev/guides/libraries/private-files#pubspeclock.
+/pubspec.lock
+
+# Local resolution only: points `dartnative` at the SDK copy so `dart test` and
+# `dart analyze` work at the plugin root. Machine-specific — never published.
+/pubspec_overrides.yaml
+**/doc/api/
+.dart_tool/
+.flutter-plugins-dependencies
+# DartNative's equivalent of the line above; `dn pub get` writes it wherever
+# it runs, and example/.gitignore already ignores its copy.
+.dn-plugins-dependencies
+/build/
+/coverage/

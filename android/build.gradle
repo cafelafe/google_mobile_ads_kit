@@ -1,0 +1,130 @@
+// Groovy DSL, not Kotlin DSL: `dn plugin build` looks for `android/build.gradle`
+// by exact name and parses dependencies with Groovy-shaped regexes. A
+// build.gradle.kts here is silently skipped and no Android artifact is produced.
+
+group = "com.dartnative.mobile_ads"
+version = "0.1.0"
+
+buildscript {
+    repositories {
+        google()
+        mavenCentral()
+    }
+
+    dependencies {
+        classpath("com.android.tools.build:gradle:8.11.1")
+        classpath("org.jetbrains.kotlin:kotlin-gradle-plugin:2.1.0")
+    }
+}
+
+rootProject.allprojects {
+    repositories {
+        google()
+        mavenCentral()
+        // The engine embedding (io.flutter:flutter_embedding_*), which
+        // DartNativeMobileAdsPlugin implements FlutterPlugin from. The app's
+        // own Gradle plugin adds this when building an app, but this module is
+        // also built on its own (`dn plugin build`, or assembling just this
+        // project), where nothing else declares it.
+        //
+        // DartNative ships its own engine builds, so they are on the DartNative
+        // CDN rather than Flutter's storage.googleapis.com — the same host the
+        // tool points FLUTTER_STORAGE_BASE_URL at.
+        maven {
+            url = uri(
+                (System.getenv('FLUTTER_STORAGE_BASE_URL') ?: 'https://cdn.dartnative.com') +
+                    '/download.flutter.io'
+            )
+        }
+    }
+}
+
+apply plugin: "com.android.library"
+apply plugin: "org.jetbrains.kotlin.android"
+
+android {
+    namespace = "com.dartnative.mobile_ads"
+
+    // Bumping the plugin compileSdk version requires all clients of this plugin
+    // to bump the version in their app.
+    compileSdk = 36
+
+    // NDK pinned to the DartNative SDK's version. Keeping the plugin's bundled
+    // native libraries aligned with the engine's NDK is required for Play Store
+    // AAB acceptance.
+    ndkVersion = "28.2.13676358"
+
+    // CMakeLists lives at the plugin root, `src/CMakeLists.txt`, exactly where
+    // `dn create --template=plugin_ffi` puts it and where the SDK's plugin_ffi
+    // Gradle template points (`../src/CMakeLists.txt`). The tutorial's diagram
+    // shows android/CMakeLists.txt; the tool wins (doc/design.md §12-4).
+    externalNativeBuild {
+        cmake {
+            path = "../src/CMakeLists.txt"
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility = JavaVersion.VERSION_17
+        targetCompatibility = JavaVersion.VERSION_17
+    }
+
+    defaultConfig {
+        minSdk = 24
+    }
+}
+
+// Top-level project extension, not inside android {}. `kotlinOptions` is
+// deprecated since Kotlin 2.0; `compilerOptions` is the typed replacement.
+kotlin {
+    compilerOptions {
+        jvmTarget = org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17
+    }
+}
+
+dependencies {
+    // Pin an explicit version: an .aar carries no POM, so the generated consumer
+    // wrapper re-declares this coordinate and cannot resolve a versionless one.
+    // Never reference cross-file Gradle variables here ($rootProject.ext.*) —
+    // `dn plugin build` fails hard on those.
+    //
+    // GMA Next-Gen SDK, not the legacy play-services-ads (doc/design.md §12-9):
+    // `dn plugin build` ships one prebuilt .aar, so there is no consumer-side
+    // switch like Flutter's USE_NEXT_GEN_SDK. Requires minSdk 24 / compileSdk 35+.
+    // Its callbacks fire on a background thread — hop to main before reaching Dart.
+    // Latest checked: 1.4.0, 2026-09.
+    implementation 'com.google.android.libraries.ads.mobile.sdk:ads-mobile-sdk:1.4.0'
+
+    // AdsBridge is annotated @Keep so R8 cannot strip the methods that only JNI
+    // calls. androidx.annotation arrives transitively via the engine, but the
+    // compile-time reference is ours, so declare it.
+    implementation 'androidx.annotation:annotation:1.9.1'
+
+    // The DartNative engine, for DNNavigator (the host Activity) and
+    // DNViewRegistry (the hot-restart reset hook).
+    //
+    // compileOnly: the app already ships the engine .aar, and pulling a second
+    // copy onto the runtime classpath would duplicate 17 MB of native libs.
+    //
+    // Two ways in, because this module is built in two contexts. Inside an app
+    // the settings plugin includes every resolved plugin as a sibling Gradle
+    // project, so `:dartnative_android` exists. Under `dn plugin build` the
+    // module is built standalone with no sibling projects, so fall back to the
+    // .aar in the SDK cache, located from `dn.sdk` in local.properties.
+    if (findProject(':dartnative_android') != null) {
+        compileOnly project(':dartnative_android')
+    } else {
+        def props = new Properties()
+        def localProps = rootProject.file('local.properties')
+        if (localProps.exists()) {
+            localProps.withInputStream { props.load(it) }
+        }
+        def dnSdk = props.getProperty('dn.sdk') ?: System.getenv('DN_SDK')
+        if (dnSdk != null) {
+            def engineAar = file("$dnSdk/bin/cache/pkg/dartnative_android/android/dartnative_android.aar")
+            if (engineAar.exists()) {
+                compileOnly files(engineAar)
+            }
+        }
+    }
+}

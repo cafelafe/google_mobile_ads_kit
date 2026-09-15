@@ -1,0 +1,45 @@
+# What `dart pub publish` / `dn plugin publish` leave out of the package tarball.
+#
+# When this file exists pub uses it INSTEAD of .gitignore for this directory, so
+# everything .gitignore excludes is repeated here, followed by things that belong
+# in the repository but not in the published package.
+
+# --- mirrored from .gitignore ---
+*.class
+*.log
+*.pyc
+*.swp
+.DS_Store
+.atom/
+.build/
+.buildlog/
+.history
+.svn/
+.swiftpm/
+migrate_working_dir/
+*.iml
+*.ipr
+*.iws
+.idea/
+.vscode/
+/pubspec.lock
+/pubspec_overrides.yaml
+**/doc/api/
+.dart_tool/
+.flutter-plugins-dependencies
+.dn-plugins-dependencies
+/build/
+/coverage/
+
+# --- repository-only ---
+# The research log behind doc/design.md. Contributor material, like CLAUDE.md:
+# it records how the design was arrived at, not how to use the package. The
+# design spec itself stays in — the public API's doc comments cite its sections.
+doc/research.md
+# Agent guidance for people working ON this package. Consumers get the
+# package's own skill from `skills/` via `dart run skills@ get`; the contents of
+# .claude/skills/ are mostly third-party skills vendored under their own
+# licences, which should not be redistributed inside this package.
+.claude/
+.config/
+CLAUDE.md
