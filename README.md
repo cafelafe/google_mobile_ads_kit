@@ -441,3 +441,9 @@ MIT — see [LICENSE](LICENSE). The public API surface follows
 to ease migration; no code is derived from it. The plugin ships its own native
 bridge — the Google Mobile Ads SDK 13.x on iOS, the GMA Next-Gen SDK on Android
 — over FFI, built on the DartNative framework's runtime.
+
+**Not an official Google product.** Google Mobile Ads and AdMob are trademarks
+of Google LLC; this is an independent community plugin, not affiliated with or
+endorsed by Google. It is maintained on a best-effort basis — see
+[Supported ad formats](#supported-ad-formats) for what is verified on which
+platform.
