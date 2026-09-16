@@ -1,4 +1,4 @@
-# dartnative_mobile_ads_example
+# google_mobile_ads_kit_example
 
 A **dartnative** app, scaffolded by `dn create`. It ships with correct iOS +
 Android runner glue (so it renders instead of white-screening) and is ready for a

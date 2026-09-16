@@ -1,21 +1,21 @@
-# dartnative_mobile_ads
+# google_mobile_ads_kit
 
 Google Mobile Ads (AdMob) plugin for DartNative. Published package — everything
 here ships to users.
 
 ## Where to start
 
-Read in this order. **The two deepest documents are written in Japanese** —
-the design rationale and the SDK research live there.
+Read in this order. The implementation manual is written in Japanese; the
+rest is English.
 
 1. This file — the rules you must not break.
 2. `.claude/skills/dartnative-plugin/SKILL.md` (JA, ~460 lines) — **the
    implementation manual.** Working FFI skeletons, the dispatcher-slot code for
    both platforms, the JNI shim, `NativeElement`. This is what you actually type.
-3. [`doc/design.md`](doc/design.md) (JA, ~400 lines) — what we built and why,
+3. [`doc/design.md`](doc/design.md) (EN, ~650 lines) — what we built and why,
    updated to the shipped state. §10 is the status table, §12 the open
    questions. Section numbers are cited from code — never renumber them.
-4. [`doc/research.md`](doc/research.md) (JA, ~350 lines) — evidence only.
+4. [`doc/research.md`](doc/research.md) (EN, ~400 lines) — evidence only.
    Read §0, then dip in when you need to know *how we know* something.
 5. [`README.md`](README.md) / [`doc/migration_from_flutter.md`](doc/migration_from_flutter.md)
    (EN) — the user-facing view.
@@ -25,19 +25,33 @@ the design rationale and the SDK research live there.
 - **iOS artifacts require macOS + Xcode.** `import GoogleMobileAds` forces the
   CocoaPods build path and `dn plugin build` exits immediately on other hosts.
   On Windows you can complete all Dart and Android work, nothing iOS.
-- **iOS banner support is blocked on an unverified assumption**, not banner
-  support as a whole. The iOS plugin-provider contract has not been confirmed
-  (`doc/design.md` §12-1); the Android contract is confirmed and Android
-  banners are implemented.
-- **Banners are not native ads.** A banner is one `AdView` that the SDK draws
-  entirely on its own — the plugin returns a single view and writes no layout.
-  *Native ads* instead need the layout built natively, either from one of the
-  templates this package ships or from an app-registered factory
-  (`doc/design.md` §8). Both are implemented on Android.
-- **`createView` must return `null` for a view type that is not yours.**
-  `DNPluginRegistry` takes the first non-null result and stops, so returning a
-  placeholder view hijacks every other plugin's views. This does not show up
-  until a second view type exists (`doc/design.md` §5-1).
+- **Every format is implemented on both platforms, but iOS has only run on
+  the simulator.** Every format loads there and the built-in templates pass
+  AdMob's native ad validator, but nothing has been checked on real iOS
+  hardware. Treat iOS device behaviour as unverified (`doc/design.md` §1-1).
+- **The iOS preloader lives in a module a plain import cannot see.** Its
+  headers are under `PrivateHeaders/` (`GAD*Preloader_Beta.h`), reachable only
+  by adding `import GoogleMobileAds_Private`. Searching `Headers/` alone makes
+  the whole API look absent — it is not. Being Beta, it can change between SDK
+  releases; the podspec's `~> 13.0` pin bounds that (`doc/design.md` §1-1).
+- **The iOS provider contract is not Android's.** No protocol to implement:
+  register two C function pointers through `DNRegisterPluginProvider`, resolved
+  with `dlsym` — never `import dartnative_ios` (it would be a circular pod).
+  Registration is triggered from Dart's `loadSymbols()`, because iOS has no
+  registrant hook (`doc/design.md` §12-1).
+- **Banners are not native ads.** A banner is one `AdView`/`BannerView` that the
+  SDK draws entirely on its own — the plugin returns a single view and writes no
+  layout. *Native ads* instead need the layout built natively, either from one of
+  the templates this package ships or from an app-registered factory
+  (`doc/design.md` §8). Both are implemented on both platforms.
+- **`createView` must disown a view type that is not yours** — `null` on
+  Android, `0` on iOS. The registry takes the first non-null/non-zero result and
+  stops, so returning a placeholder hijacks every other plugin's views. This does
+  not show up until a second view type exists (`doc/design.md` §5-1).
+- **Enum indices cross the FFI boundary raw, and the two platforms disagree.**
+  `AdChoicesPlacement` / `MediaAspectRatio` happen to match the Dart order on
+  iOS, so they pass straight through; Android's differ and are remapped. Never
+  copy one platform's handling to the other (`doc/design.md` §8-3).
 - **A hosted view's size reaches Yoga only through `SetFlexAspectRatio`.**
   Wrapping the widget in a `SizedBox` sizes the Dart box and leaves the native
   view at 0x0 — it loads but never appears (`doc/design.md` §8-7).

@@ -15,7 +15,7 @@ import 'package:ffi/ffi.dart';
 /// Event kinds delivered by the native dispatcher.
 ///
 /// The numeric values are part of the Dart↔native contract and are duplicated
-/// in `AdsBridge.kt` (`STATUS_*`) and `DNMobileAds.swift`. Never renumber an
+/// in `AdsBridge.kt` (`STATUS_*`) and `GMAKMobileAds.swift`. Never renumber an
 /// existing member; append new ones.
 abstract final class AdEventStatus {
   /// The SDK finished initializing. Payload: `{}`.
@@ -65,6 +65,15 @@ abstract final class AdEventStatus {
 
   /// A banner's full-screen overlay closed. Payload: `{}`.
   static const int closed = 14;
+
+  /// Yoga laid a native ad's container out at a width it had not reported
+  /// before. Payload: `{"width": double}` in logical pixels.
+  ///
+  /// The width `LayoutBuilder` hands the widget is the screen's, not the
+  /// slot's, so the aspect ratio derived from it reserves the wrong height
+  /// whenever the ad sits inside padding. This is the real width, from which
+  /// the ratio is corrected (`doc/design.md` §8-6).
+  static const int laidOut = 15;
 }
 
 // Dart -> native.
@@ -117,7 +126,7 @@ typedef _NativeDisposeDart = void Function(int);
 typedef _AdaptiveHeightC = Int32 Function(Int32);
 typedef _AdaptiveHeightDart = int Function(int);
 
-// Preloading. `DNAdsPreloadStart` mirrors DNAdsLoadAd plus a preload id and
+// Preloading. `GMAKPreloadStart` mirrors GMAKLoadAd plus a preload id and
 // buffer size; the query calls are synchronous because the Next-Gen preloader
 // answers them from its local buffer without a network round trip.
 typedef _PreloadStartC = Void Function(
@@ -152,7 +161,7 @@ typedef _ReadJsonDart = int Function(
 // Native -> Dart.
 typedef _DispatchC = Void Function(Int64, Int32, Pointer<Utf8>);
 
-/// Ad format identifiers passed to `DNAdsLoadAd`.
+/// Ad format identifiers passed to `GMAKLoadAd`.
 ///
 /// Shared with `AdsBridge.kt` (`FORMAT_*`); see [AdEventStatus] for the
 /// numbering rule.
@@ -240,53 +249,64 @@ abstract final class AdsFFIBindings {
     if (!Platform.isAndroid && !Platform.isIOS) return;
 
     final DynamicLibrary lib = Platform.isAndroid
-        ? DynamicLibrary.open('libdartnative_mobile_ads.so')
+        ? DynamicLibrary.open('libgoogle_mobile_ads_kit.so')
         : DynamicLibrary.process();
 
     _setDispatcher = lib.lookupFunction<_SetDispatcherC, _SetDispatcherDart>(
-        'DNAdsSetDispatcher');
+        'GMAKSetDispatcher');
     _initialize =
-        lib.lookupFunction<_InitializeC, _InitializeDart>('DNAdsInitialize');
-    _loadAd = lib.lookupFunction<_LoadAdC, _LoadAdDart>('DNAdsLoadAd');
-    _showAd = lib.lookupFunction<_ShowAdC, _ShowAdDart>('DNAdsShowAd');
+        lib.lookupFunction<_InitializeC, _InitializeDart>('GMAKInitialize');
+    _loadAd = lib.lookupFunction<_LoadAdC, _LoadAdDart>('GMAKLoadAd');
+    _showAd = lib.lookupFunction<_ShowAdC, _ShowAdDart>('GMAKShowAd');
     _disposeAd =
-        lib.lookupFunction<_DisposeAdC, _DisposeAdDart>('DNAdsDisposeAd');
+        lib.lookupFunction<_DisposeAdC, _DisposeAdDart>('GMAKDisposeAd');
     _setMuted =
-        lib.lookupFunction<_SetBoolC, _SetBoolDart>('DNAdsSetAppMuted');
+        lib.lookupFunction<_SetBoolC, _SetBoolDart>('GMAKSetAppMuted');
     _setImmersiveMode = lib.lookupFunction<_SetAdBoolC, _SetAdBoolDart>(
-        'DNAdsSetImmersiveMode');
+        'GMAKSetImmersiveMode');
     _setServerSideVerification = lib.lookupFunction<_SetSsvC, _SetSsvDart>(
-        'DNAdsSetServerSideVerification');
+        'GMAKSetServerSideVerification');
 
     _bannerCreate = lib.lookupFunction<_BannerCreateC, _BannerCreateDart>(
-        'DNAdsBannerCreate');
+        'GMAKBannerCreate');
     _bannerDispose = lib.lookupFunction<_BannerDisposeC, _BannerDisposeDart>(
-        'DNAdsBannerDispose');
+        'GMAKBannerDispose');
     _nativeAdCreate = lib.lookupFunction<_NativeCreateC, _NativeCreateDart>(
-        'DNAdsNativeAdCreate');
+        'GMAKNativeAdCreate');
     _nativeAdDispose = lib.lookupFunction<_NativeDisposeC, _NativeDisposeDart>(
-        'DNAdsNativeAdDispose');
+        'GMAKNativeAdDispose');
     _adaptiveBannerHeight =
         lib.lookupFunction<_AdaptiveHeightC, _AdaptiveHeightDart>(
-            'DNAdsAdaptiveBannerHeight');
+            'GMAKAdaptiveBannerHeight');
 
     _preloadStart = lib.lookupFunction<_PreloadStartC, _PreloadStartDart>(
-        'DNAdsPreloadStart');
+        'GMAKPreloadStart');
     _preloadPoll =
-        lib.lookupFunction<_PreloadPollC, _PreloadPollDart>('DNAdsPreloadPoll');
+        lib.lookupFunction<_PreloadPollC, _PreloadPollDart>('GMAKPreloadPoll');
     _preloadIsAvailable = lib.lookupFunction<_PreloadQueryC, _PreloadQueryDart>(
-        'DNAdsPreloadIsAdAvailable');
+        'GMAKPreloadIsAdAvailable');
     _preloadNumAvailable =
         lib.lookupFunction<_PreloadQueryC, _PreloadQueryDart>(
-            'DNAdsPreloadNumAdsAvailable');
+            'GMAKPreloadNumAdsAvailable');
     _preloadDestroy =
         lib.lookupFunction<_PreloadDestroyC, _PreloadDestroyDart>(
-            'DNAdsPreloadDestroy');
+            'GMAKPreloadDestroy');
     _preloadDestroyAll =
         lib.lookupFunction<_PreloadDestroyAllC, _PreloadDestroyAllDart>(
-            'DNAdsPreloadDestroyAll');
+            'GMAKPreloadDestroyAll');
     _preloadReadJson =
-        lib.lookupFunction<_ReadJsonC, _ReadJsonDart>('DNAdsPreloadReadJson');
+        lib.lookupFunction<_ReadJsonC, _ReadJsonDart>('GMAKPreloadReadJson');
+
+    // Register the view provider that backs banners and native ads.
+    //
+    // iOS only. Android registers its providers from the plugin class, which
+    // the generated registrant instantiates; iOS has no such hook, so the pod
+    // is never entered unless Dart calls into it (`doc/design.md` §12-1).
+    if (Platform.isIOS) {
+      lib.lookupFunction<Void Function(), void Function()>(
+        'GMAKRegisterProvider',
+      )();
+    }
 
     _loaded = true;
 

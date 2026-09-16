@@ -13,14 +13,14 @@
 // overwriting it.
 //
 // Plugins loaded:
-//   • dartnative_mobile_ads
+//   • google_mobile_ads_kit
 
 import 'dart:io' show Platform;
 
 import 'package:dartnative/dartnative.dart';
 import 'package:dartnative_ios/dartnative_ios.dart';
 import 'package:dartnative_android/dartnative_android.dart';
-import 'package:dartnative_mobile_ads/dartnative_mobile_ads.dart';
+import 'package:google_mobile_ads_kit/google_mobile_ads_kit.dart';
 
 abstract final class DartNativePluginRegistrant {
   /// Registers the platform bindings and loads every DartNative plugin's
@@ -39,14 +39,14 @@ abstract final class DartNativePluginRegistrant {
       DartNativeLicense.instance.noteTrialEnded();
     }
     DartNativeLicense.instance.reportPluginUsage(const <String>[
-      'dartnative_mobile_ads',
+      'google_mobile_ads_kit',
     ]);
     registerNativeBindings(
       Platform.isAndroid
           ? AndroidNativeBindings.instance
           : IOSNativeBindings.instance,
     );
-    _load('dartnative_mobile_ads', () {
+    _load('google_mobile_ads_kit', () {
       initializeMobileAdsPlugin();
     });
   }

@@ -6,7 +6,7 @@ plugins {
 }
 
 android {
-    namespace = "com.dartnative.dartnative_mobile_ads_example"
+    namespace = "com.cafelafe.google_mobile_ads_kit_example"
     compileSdk = dartnative.compileSdkVersion
     ndkVersion = dartnative.ndkVersion
 
@@ -22,7 +22,7 @@ android {
 
     defaultConfig {
         // TODO: Specify your own unique Application ID (https://developer.android.com/studio/build/application-id.html).
-        applicationId = "com.dartnative.dartnative_mobile_ads_example"
+        applicationId = "com.cafelafe.google_mobile_ads_kit_example"
         // You can update the following values to match your application needs.
         minSdk = dartnative.minSdkVersion
         targetSdk = dartnative.targetSdkVersion

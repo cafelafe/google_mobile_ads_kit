@@ -1,13 +1,13 @@
 @TestOn('vm')
 library;
 
-import 'package:dartnative_mobile_ads/src/ad_error.dart';
-import 'package:dartnative_mobile_ads/src/ad_listener.dart';
-import 'package:dartnative_mobile_ads/src/ad_preloader.dart';
-import 'package:dartnative_mobile_ads/src/ad_request.dart';
-import 'package:dartnative_mobile_ads/src/interstitial_ad.dart';
-import 'package:dartnative_mobile_ads/src/mobile_ads.dart';
-import 'package:dartnative_mobile_ads/src/rewarded_ad.dart';
+import 'package:google_mobile_ads_kit/src/ad_error.dart';
+import 'package:google_mobile_ads_kit/src/ad_listener.dart';
+import 'package:google_mobile_ads_kit/src/ad_preloader.dart';
+import 'package:google_mobile_ads_kit/src/ad_request.dart';
+import 'package:google_mobile_ads_kit/src/interstitial_ad.dart';
+import 'package:google_mobile_ads_kit/src/mobile_ads.dart';
+import 'package:google_mobile_ads_kit/src/rewarded_ad.dart';
 import 'package:test/test.dart';
 
 /// Guards the parts of the API that exist to match `google_mobile_ads`.
@@ -77,7 +77,7 @@ void main() {
       );
 
       expect(seen, isNotNull);
-      expect(seen!.domain, 'dartnative_mobile_ads');
+      expect(seen!.domain, 'google_mobile_ads_kit');
     });
 
     test('polling an unstarted preloader yields null', () async {

@@ -143,7 +143,7 @@ Future<void> loadFullScreenAd<T extends FullScreenAd>({
     // fall through to their no-ad path (design.md §1-2).
     onFailed(const LoadAdError(
       -1,
-      'dartnative_mobile_ads',
+      'google_mobile_ads_kit',
       'The Mobile Ads SDK is not available on this platform.',
       null,
     ));

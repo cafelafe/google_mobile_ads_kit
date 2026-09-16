@@ -16,7 +16,7 @@
     android:layout_height="wrap_content">
 
     <LinearLayout
-        android:id="@+id/dn_native_background"
+        android:id="@+id/gmak_native_background"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:orientation="horizontal"
@@ -24,7 +24,7 @@
         android:padding="12dp">
 
         <ImageView
-            android:id="@+id/dn_native_icon"
+            android:id="@+id/gmak_native_icon"
             android:layout_width="48dp"
             android:layout_height="48dp"
             android:adjustViewBounds="true"
@@ -40,7 +40,7 @@
             android:layout_marginEnd="12dp">
 
             <TextView
-                android:id="@+id/dn_native_headline"
+                android:id="@+id/gmak_native_headline"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:maxLines="1"
@@ -49,7 +49,7 @@
                 android:textStyle="bold" />
 
             <TextView
-                android:id="@+id/dn_native_body"
+                android:id="@+id/gmak_native_body"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:maxLines="1"
@@ -57,7 +57,7 @@
                 android:textSize="13sp" />
 
             <RatingBar
-                android:id="@+id/dn_native_rating"
+                android:id="@+id/gmak_native_rating"
                 style="?android:attr/ratingBarStyleSmall"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
@@ -68,7 +68,7 @@
         </LinearLayout>
 
         <Button
-            android:id="@+id/dn_native_cta"
+            android:id="@+id/gmak_native_cta"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:maxLines="1"

@@ -16,13 +16,6 @@ packages:
       relative: true
     source: path
     version: "1.0.0"
-  dartnative_mobile_ads:
-    dependency: "direct main"
-    description:
-      path: ".."
-      relative: true
-    source: path
-    version: "0.1.0"
   ffi:
     dependency: "direct main"
     description:
@@ -31,6 +24,13 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "2.2.0"
+  google_mobile_ads_kit:
+    dependency: "direct main"
+    description:
+      path: ".."
+      relative: true
+    source: path
+    version: "0.1.0"
   image:
     dependency: "direct dev"
     description:

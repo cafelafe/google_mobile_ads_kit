@@ -1,4 +1,4 @@
-package com.dartnative.mobile_ads
+package com.cafelafe.google_mobile_ads_kit
 
 import android.content.Context
 import android.content.pm.PackageManager
@@ -91,6 +91,7 @@ object AdsBridge {
     private const val STATUS_AD_PRELOADED = 10
     private const val STATUS_ADS_EXHAUSTED = 11
     private const val STATUS_FAILED_TO_PRELOAD = 12
+    private const val STATUS_LAID_OUT = 15
 
     // Ad formats. Mirrors AdFormat in lib/src/ads_ffi_bindings.dart.
     private const val FORMAT_INTERSTITIAL = 0
@@ -108,7 +109,7 @@ object AdsBridge {
     private const val APP_ID_META_DATA = "com.google.android.gms.ads.APPLICATION_ID"
 
     /** The error domain reported for failures raised by this plugin itself. */
-    private const val PLUGIN_ERROR_DOMAIN = "dartnative_mobile_ads"
+    private const val PLUGIN_ERROR_DOMAIN = "google_mobile_ads_kit"
 
     /** The error domain reported for failures raised by the Mobile Ads SDK. */
     private const val SDK_ERROR_DOMAIN = "com.google.android.libraries.ads.mobile.sdk"
@@ -227,7 +228,7 @@ object AdsBridge {
                 STATUS_INITIALIZED,
                 errorPayload(
                     "Missing $APP_ID_META_DATA <meta-data> in AndroidManifest.xml. " +
-                        "Add your AdMob App ID; see the dartnative_mobile_ads README.",
+                        "Add your AdMob App ID; see the google_mobile_ads_kit README.",
                 ),
             )
             return
@@ -464,7 +465,7 @@ object AdsBridge {
      * is idempotent per key, so resolving it here yields the same number the
      * Dart side got without either hard-coding one.
      */
-    private const val BANNER_VIEW_TYPE_KEY = "dartnative_mobile_ads/banner"
+    private const val BANNER_VIEW_TYPE_KEY = "google_mobile_ads_kit/banner"
 
     /** The reconciler's view type for our banners. */
     val bannerViewType: Int by lazy {
@@ -665,7 +666,7 @@ object AdsBridge {
     // -----------------------------------------------------------------------
 
     /** Must match `ViewType.claim(...)` in lib/src/native_ad.dart. */
-    private const val NATIVE_VIEW_TYPE_KEY = "dartnative_mobile_ads/native"
+    private const val NATIVE_VIEW_TYPE_KEY = "google_mobile_ads_kit/native"
 
     /** The reconciler's view type for our native ads. */
     val nativeAdViewType: Int by lazy {
@@ -691,7 +692,7 @@ object AdsBridge {
     /**
      * Registers [factory] under [factoryId].
      *
-     * Called through [DartNativeMobileAdsPlugin.registerNativeAdFactory];
+     * Called through [GoogleMobileAdsKitPlugin.registerNativeAdFactory];
      * returns false if that id is taken, matching the Flutter plugin.
      */
     internal fun addNativeAdFactory(factoryId: String, factory: NativeAdFactory): Boolean {
@@ -744,6 +745,24 @@ object AdsBridge {
         nativeAds[viewId] = holder
         pendingNativeContainers.addLast(container)
 
+        // Reports Yoga's real width so Dart can correct the aspect ratio it
+        // guessed from LayoutBuilder, which gives the screen width rather than
+        // the slot's — an ad inside padding is otherwise reserved too short
+        // (doc/design.md §8-6). Only a *change* is reported: the corrected
+        // ratio leaves the width alone, so this settles in one round trip.
+        var reportedWidth = -1
+        container.addOnLayoutChangeListener { view, _, _, _, _, _, _, _, _ ->
+            val width = view.width
+            if (width <= 0 || width == reportedWidth) return@addOnLayoutChangeListener
+            reportedWidth = width
+            val density = view.resources.displayMetrics.density
+            deliver(
+                token,
+                STATUS_LAID_OUT,
+                JSONObject().put("width", width / density).toString(),
+            )
+        }
+
         val options = try {
             JSONObject(optionsJson)
         } catch (_: Throwable) {
@@ -764,7 +783,7 @@ object AdsBridge {
             deliverLoadFailure(
                 token,
                 "No NativeAdFactory registered for id: $factoryId. Register it with " +
-                    "DartNativeMobileAdsPlugin.registerNativeAdFactory before requesting the ad.",
+                    "GoogleMobileAdsKitPlugin.registerNativeAdFactory before requesting the ad.",
             )
             return
         }

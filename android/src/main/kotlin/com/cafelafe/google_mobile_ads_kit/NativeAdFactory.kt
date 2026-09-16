@@ -1,4 +1,4 @@
-package com.dartnative.mobile_ads
+package com.cafelafe.google_mobile_ads_kit
 
 import androidx.annotation.Keep
 import com.google.android.libraries.ads.mobile.sdk.nativead.NativeAd
@@ -34,7 +34,7 @@ import com.google.android.libraries.ads.mobile.sdk.nativead.NativeAdView
  * Activity's `onCreate`:
  *
  * ```kotlin
- * DartNativeMobileAdsPlugin.registerNativeAdFactory(
+ * GoogleMobileAdsKitPlugin.registerNativeAdFactory(
  *     this, "adFactoryExample", MyNativeAdFactory(layoutInflater))
  * ```
  *

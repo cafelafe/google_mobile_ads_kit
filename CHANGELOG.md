@@ -1,90 +1,20 @@
-# Changelog
+# CHANGELOG
 
 ## 0.1.0
 
-First release. Every ad format works end to end on Android and is verified
-on a device; the iOS half is written but has never been compiled.
+Initial release: Google Mobile Ads (AdMob) for DartNative, over `dart:ffi`. The public API follows `google_mobile_ads`.
 
-### Added
-
-- **Banner ads.** `BannerAd` goes straight into the widget tree — no `AdWidget`
-  wrapper and no manual `load()`, since DartNative mounts native views directly.
-  Fixed sizes plus adaptive sizing via
-  `AdSize.getCurrentOrientationAnchoredAdaptiveBannerAdSize(width)`, which is
-  synchronous here (it is a pure calculation, and FFI has no async mode); the
-  `Future`-returning form is provided too so ported code compiles unchanged.
-  The standard sizes (`AdSize.banner`, `largeBanner`, `mediumRectangle`,
-  `fullBanner`, `leaderboard`) request the SDK's standard slots; a hand-built
-  `AdSize` is treated by AdMob as a flexible slot and may be filled with a
-  differently shaped creative, so prefer the constants. **Android only.**
-- **Native ads.** `NativeAd` goes straight into the widget tree, rendered either
-  by one of two built-in templates (`TemplateType.small` / `.medium`, styled from
-  Dart with `NativeTemplateStyle`) or by a `NativeAdFactory` you register
-  natively and name with `factoryId` — the same two routes as
-  `google_mobile_ads`. Request options via `NativeAdOptions`. **Android only.**
-
-  Two differences from upstream, both forced by the platform:
-
-  - Registration takes a `Context` rather than a `FlutterEngine`
-    (`DartNativeMobileAdsPlugin.registerNativeAdFactory`), since DartNative has
-    no engine object. The factory interface and the Dart call are unchanged.
-  - Template colors are 32-bit ARGB `int`s rather than `dart:ui` `Color`s, so
-    the style classes stay usable from code that does not depend on `dart:ui`.
-
-  The templates are this plugin's own: the Next-Gen SDK ships none, and
-  upstream's are Apache-2.0 while this package is MIT (`doc/design.md` §8-4).
-  `shouldRequestMultipleImages` and `requestCustomMuteThisAd` are not exposed —
-  the Next-Gen request builder has no equivalent.
-- **Interstitial, rewarded, rewarded interstitial and app open ads.** Load,
-  show, the full presentation-event set (showed / failed-to-show / dismissed /
-  impression / clicked), rewards, and paid events.
-- **Ad preloading** — `InterstitialAdPreloader`, `RewardedAdPreloader`,
-  `AppOpenAdPreloader` and (beyond `google_mobile_ads`)
-  `RewardedInterstitialAdPreloader`, with `start` / `pollAd` /
-  `isAdAvailable` / `getNumAdsAvailable` / `getConfiguration` /
-  `getConfigurations` / `destroy` / `destroyAll`. **Android only** — on iOS
-  `pollAd` returns null, so callers fall back to a normal load.
-- `MobileAds.instance.initialize()` and `setAppMuted()`.
-- `AdRequest` targeting: keywords, content URL, neighbouring content URLs,
-  non-personalized ads, and adapter extras.
-- `Ad.responseInfo`, `onPaidEvent` with `PrecisionType`, `setImmersiveMode`
-  (Android only) and `setServerSideOptions` on the rewarded formats.
-- An `example/` app exercising every format and preloading against Google's
-  test ad units, and an agent skill (`skills/dartnative-mobile-ads-usage`)
-  installable with `dart run skills@ get`.
-
-### API compatibility with `google_mobile_ads`
-
-Call shapes match, so ported code compiles unchanged:
-
-- `load`, `show`, `dispose` and the preloader calls all return `Future`. The
-  work behind them is synchronous — FFI has no other mode — but `await`ing them
-  is what existing code does.
-- `InterstitialAdLoadCallback` and friends are subclasses of
-  `FullScreenAdLoadCallback<T>`, not typedefs.
-
-File layout deliberately differs: upstream keeps every ad class in one 1,400-line
-`ad_containers.dart` alongside a `MethodChannel` instance manager, neither of
-which applies here (`doc/design.md` §2-1).
-
-### Notes
-
-- Android targets the GMA Next-Gen SDK (`ads-mobile-sdk`) only; there is no
-  legacy `play-services-ads` switch (`doc/design.md` §12-9). The SDK's
-  background-thread callbacks are marshalled to the main thread inside the plugin.
-- Unmounting a `BannerAd` / `NativeAd` destroys the native view one frame later,
-  unless the element was mounted again in between — so a list cell recycled
-  straight back in keeps its ad, while a cell that scrolls away and returns
-  issues a new request. Prefer non-recycling containers for ad slots.
-- Hot restart is handled through `DNViewRegistry.registerResetHook`: the
-  dispatcher slot is zeroed and live ads released before the old isolate is torn
-  down, so late SDK events cannot reach a dead isolate.
-- On web and desktop every call is inert rather than throwing, so shared code
-  keeps running there. On iOS the unimplemented formats report a load failure
-  immediately rather than staying silent.
-
-### Not yet implemented
-
-- iOS banners, native ads and preloading — all stubs (`doc/design.md` §1-1,
-  §12-1). The iOS full-screen bridge exists but is uncompiled (needs macOS + Xcode).
-- Mediation (`doc/design.md` §1-3).
+- `BannerAd` goes straight into the widget tree — no `AdWidget`, no manual `load()`. Fixed sizes (`AdSize.banner`, `largeBanner`, `mediumRectangle`, `fullBanner`, `leaderboard`) and anchored adaptive sizing via the synchronous `AdSize.getCurrentOrientationAnchoredAdaptiveBannerAdSize(width)`; the `Future` form `getAnchoredAdaptiveBannerAdSize(width)` is kept so ported code compiles.
+- `NativeAd` in the widget tree, rendered by a built-in template (`TemplateType.small` / `.medium`, styled with `NativeTemplateStyle`) or by a `NativeAdFactory` registered natively and named with `factoryId`. `NativeAdOptions` for media aspect ratio, AdChoices placement and video options; `customOptions` reaches the factory.
+- Native ad factory registration takes a `Context` (`GoogleMobileAdsKitPlugin.registerNativeAdFactory(context, id, factory)`) on Android and `GMAKMobileAds.registerNativeAdFactory(_:factory:)` on iOS. The factory body and the Dart call are unchanged from `google_mobile_ads`.
+- Template colours are 32-bit ARGB `int`s rather than `dart:ui` `Color`s. The templates are this plugin's own (MIT); the Next-Gen SDK ships none.
+- `InterstitialAd`, `RewardedAd`, `RewardedInterstitialAd`, `AppOpenAd`: `load` / `show` / `dispose`, `FullScreenContentCallback`, rewards, `onPaidEvent`, `responseInfo`, `setImmersiveMode` (Android) and `setServerSideOptions`.
+- Preloading: `InterstitialAdPreloader`, `RewardedAdPreloader`, `AppOpenAdPreloader` and `RewardedInterstitialAdPreloader` (also on iOS, which upstream does not wire) with `start` / `pollAd` / `isAdAvailable` / `getNumAdsAvailable` / `getConfiguration` / `getConfigurations` / `destroy` / `destroyAll`. iOS uses the SDK's Beta preloader module (`GoogleMobileAds_Private`); the podspec pins `~> 13.0`.
+- `MobileAds.instance.initialize()` and `setAppMuted()`. `AdRequest` with keywords, content URL, neighbouring content URLs, non-personalized ads and adapter extras.
+- Android targets the GMA Next-Gen SDK (`ads-mobile-sdk`) only. The SDK's background-thread callbacks are marshalled to the main thread inside the plugin. The AdMob App ID is read from the usual `<meta-data>` manifest entry.
+- Unmounting a `BannerAd` / `NativeAd` destroys the native view one frame later unless it was mounted again in between, so a recycled list cell keeps its ad. Prefer non-recycling containers for ad slots.
+- Hot restart is safe: the dispatcher slot is zeroed and live ads released before the old isolate is torn down.
+- Formats unavailable on a platform report `onAdFailedToLoad` immediately rather than staying silent. On web and desktop every call is a no-op.
+- The iOS SDK log line *"User interactions must be disabled on the asset view"* is expected with the built-in templates and harmless.
+- Not implemented: mediation, Ad Manager (GAM), `NativeAdOptions.shouldRequestMultipleImages`, `requestCustomMuteThisAd`.
+- `example/` app covering every format and preloading, and an agent skill (`skills/google-mobile-ads-kit-usage`) installable with `dart run skills@ get`.

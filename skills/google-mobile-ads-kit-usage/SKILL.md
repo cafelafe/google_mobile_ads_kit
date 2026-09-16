@@ -1,9 +1,9 @@
 ---
-name: dartnative-mobile-ads-usage
-description: "Use dartnative_mobile_ads (AdMob for DartNative): initialization, App ID setup, banner, native, interstitial, rewarded, rewarded interstitial and app open ads, preloading, test ad units, and the differences from google_mobile_ads. Use when adding or debugging ads in a DartNative app, or porting google_mobile_ads code."
+name: google-mobile-ads-kit-usage
+description: "Use google_mobile_ads_kit (AdMob for DartNative): initialization, App ID setup, banner, native, interstitial, rewarded, rewarded interstitial and app open ads, preloading, test ad units, and the differences from google_mobile_ads. Use when adding or debugging ads in a DartNative app, or porting google_mobile_ads code."
 ---
 
-# dartnative_mobile_ads
+# google_mobile_ads_kit
 
 Google Mobile Ads (AdMob) for **DartNative** apps. The public API follows
 Flutter's `google_mobile_ads`, so most ported code compiles unchanged — but the
@@ -14,14 +14,19 @@ This skill covers what to write and what to avoid.
 
 | Format | Android | iOS | web / desktop |
 |---|---|---|---|
-| Interstitial, Rewarded, Rewarded interstitial, App open | ✅ verified on device | 🚧 written, never compiled | no-op |
-| Banner (fixed + adaptive) | ✅ | ❌ stub | no-op |
-| Native (templates + factory) | ✅ | ❌ stub | no-op |
-| Preloading | ✅ | ❌ stub | no-op |
+| Interstitial, Rewarded, Rewarded interstitial, App open | ✅ | ✅ | no-op |
+| Banner (fixed + anchored adaptive) | ✅ | ✅ | no-op |
+| Native (templates + factory) | ✅ | ✅ | no-op |
+| Preloading | ✅ | ✅ | no-op |
 
-- **iOS stubs are not silent.** A banner or native ad reports `onAdFailedToLoad`
-  immediately; a preloader's `pollAd` returns `null`. Write the failure path and
-  the app degrades cleanly.
+- **🚧 Not implemented:** mediation, Ad Manager (GAM), inline adaptive and
+  collapsible banners.
+- **iOS preloading uses the SDK's Beta module** (`GoogleMobileAds_Private`),
+  so it can change between SDK releases. Always keep the `pollAd == null`
+  fallback — an empty buffer is normal on both platforms.
+- **Unavailable formats are not silent.** They report `onAdFailedToLoad`
+  immediately rather than hanging, so write the failure path and the app
+  degrades cleanly.
 - **web / desktop:** every call is inert rather than throwing, so shared code
   keeps running. `MobileAds.instance.initialize()` completes with an empty status.
 
@@ -32,7 +37,7 @@ This skill covers what to write and what to avoid.
 
    ```yaml
    dependencies:
-     dartnative_mobile_ads: ^0.1.0
+     google_mobile_ads_kit: ^0.1.0
    ```
 
 2. **AdMob App ID, natively, on both platforms.** DartNative has no manifest
@@ -57,7 +62,7 @@ This skill covers what to write and what to avoid.
    before it. Do not `await` it before `runApp`; the SDK queues requests.
 
    ```dart
-   import 'package:dartnative_mobile_ads/dartnative_mobile_ads.dart';
+   import 'package:google_mobile_ads_kit/google_mobile_ads_kit.dart';
 
    void main() {
      DartNativePluginRegistrant.registerAll();   // not WidgetsFlutterBinding
@@ -68,13 +73,13 @@ This skill covers what to write and what to avoid.
 
 ## How this differs from google_mobile_ads
 
-| | `google_mobile_ads` | `dartnative_mobile_ads` |
+| | `google_mobile_ads` | `google_mobile_ads_kit` |
 |---|---|---|
 | Banner / native placement | `AdWidget(ad: myAd)` after `await ad.load()` | Put `BannerAd(...)` / `NativeAd(...)` **directly in the tree**. No `AdWidget`, no `load()` — the request goes out on mount |
 | Adaptive size | `await AdSize.getAnchoredAdaptiveBannerAdSize(orientation, width)` | `AdSize.getCurrentOrientationAnchoredAdaptiveBannerAdSize(width)` — **synchronous**, call it inside `LayoutBuilder`. The `Future` form `getAnchoredAdaptiveBannerAdSize(width)` also exists for ported code |
-| Native ad factory registration (Android) | `GoogleMobileAdsPlugin.registerNativeAdFactory(engine, id, factory)` | `DartNativeMobileAdsPlugin.registerNativeAdFactory(context, id, factory)` — takes a `Context`; there is no `FlutterEngine`. The factory body is unchanged |
+| Native ad factory registration (Android) | `GoogleMobileAdsPlugin.registerNativeAdFactory(engine, id, factory)` | `GoogleMobileAdsKitPlugin.registerNativeAdFactory(context, id, factory)` — takes a `Context`; there is no `FlutterEngine`. The factory body is unchanged |
 | Template colors | `dart:ui` `Color` | 32-bit ARGB `int`, e.g. `0xFFFFFFFF` |
-| Native ad height | from the platform view | **You reserve it**: template default (small 90 / medium 350) or `height:` — required in practice with `factoryId` |
+| Native ad height | from the platform view | **You reserve it**: template default (small 144 on iOS / 90 on Android, medium 350) or `height:` — required in practice with `factoryId` |
 | `load` / `show` / `dispose` / preloader calls | `Future` | Still `Future` (the work is synchronous underneath) — `await` them as before |
 | Android SDK | legacy, `USE_NEXT_GEN_SDK` flag | **Next-Gen only**, no flag |
 | Not available | — | `NativeAdOptions.shouldRequestMultipleImages`, `requestCustomMuteThisAd` (no Next-Gen equivalent); rewarded-interstitial **preloader** is *extra* here |
@@ -174,10 +179,10 @@ NativeAd(
 from Dart, and pass the height your layout needs:
 ```kotlin
 // android/app/src/main/kotlin/.../MainActivity.kt
-DartNativeMobileAdsPlugin.registerNativeAdFactory(this, "adFactoryExample", MyNativeAdFactory(layoutInflater))
+GoogleMobileAdsKitPlugin.registerNativeAdFactory(this, "adFactoryExample", MyNativeAdFactory(layoutInflater))
 ```
 ```kotlin
-class MyNativeAdFactory(private val inflater: LayoutInflater) : com.dartnative.mobile_ads.NativeAdFactory {
+class MyNativeAdFactory(private val inflater: LayoutInflater) : com.cafelafe.google_mobile_ads_kit.NativeAdFactory {
     override fun createNativeAdView(nativeAd: NativeAd, customOptions: Map<String, Any?>): NativeAdView {
         val view = inflater.inflate(R.layout.my_native_ad, null) as NativeAdView
         view.findViewById<TextView>(R.id.headline).also { it.text = nativeAd.headline; view.headlineView = it }
@@ -187,14 +192,35 @@ class MyNativeAdFactory(private val inflater: LayoutInflater) : com.dartnative.m
     }
 }
 ```
+On iOS, register under the **same id** in `AppDelegate`:
+```swift
+import google_mobile_ads_kit
+
+GMAKMobileAds.registerNativeAdFactory("adFactoryExample", factory: MyNativeAdFactory())
+
+final class MyNativeAdFactory: NSObject, GMAKNativeAdFactory {
+    func createNativeAdView(nativeAd: NativeAd, customOptions: [String: Any]) -> NativeAdView? {
+        let view = /* your NativeAdView, from a xib or built in code */
+        view.headlineView = headlineLabel        // assign EVERY displayed asset
+        return view                              // do NOT set view.nativeAd — the plugin does
+    }
+}
+```
 ```dart
 NativeAd(adUnitId: ..., factoryId: 'adFactoryExample', height: 120, listener: NativeAdListener())
 ```
-SDK classes are the Next-Gen ones: `com.google.android.libraries.ads.mobile.sdk.nativead.*`,
-not `com.google.android.gms.ads.nativead.*`. `customOptions:` (a JSON-able map)
-reaches the factory's second argument.
+Android SDK classes are the Next-Gen ones:
+`com.google.android.libraries.ads.mobile.sdk.nativead.*`, not
+`com.google.android.gms.ads.nativead.*`. `customOptions:` (a JSON-able map)
+reaches the factory's second argument on both platforms.
 
-## Preloading (Android)
+**Assigning every displayed asset is AdMob policy, not bookkeeping** — an
+unassigned asset is not clickable and records no impression. The binding step
+differs: Android calls `registerNativeAd(ad, mediaView)` last; iOS has the plugin
+set `nativeAd` after your factory returns. An unregistered `factoryId` fails the
+load immediately, before any request goes out.
+
+## Preloading
 
 ```dart
 await InterstitialAdPreloader.start(
@@ -215,7 +241,7 @@ if (ad != null) {
   ad.fullScreenContentCallback = FullScreenContentCallback(onAdDismissedFullScreenContent: (ad) => ad.dispose());
   await ad.show();
 } else {
-  // fall back to a normal load — this is also the path iOS takes today
+  // fall back to a normal load — an empty buffer is an ordinary outcome
 }
 ```
 
@@ -256,9 +282,12 @@ Also: `isAdAvailable(id)`, `getNumAdsAvailable(id)`, `getConfiguration(id)`,
 
 | Symptom | Cause / fix |
 |---|---|
+| iOS log: `User interactions must be disabled on the asset view` | Expected and harmless with the built-in templates (the CTA is a `UIButton`); the ad stays clickable. Do not "fix" it. |
+| iOS: `pod install` says a higher minimum deployment version is required, or Xcode stops at "Target Integrity" | The app must target iOS 15.0+ in `Podfile` and the Xcode project; on Xcode 26/27 also raise older pods in `post_install` (see README, iOS setup). |
 | `No DartNative license found.` on screen | The DartNative trial only covers its own samples. `dn config --license-key=dnk_...` (never paste the key into chat or source). |
 | `initialize()` fails naming `APPLICATION_ID` | App ID `<meta-data>` missing from the Android manifest (Setup step 2). |
 | `Theme.Material3.* not found` at Android link | `dartnative_android` / `dartnative_ios` were stripped from the app's `pubspec.yaml` (running `dn pub get` from a plugin root does this). Restore them. |
 | Banner shows a different size than requested | A hand-built `AdSize` — use the `AdSize.*` constants. |
 | Native ad with `factoryId` loads but is invisible | No `height:` given, or the factory did not `registerNativeAd`. |
-| iOS: banner / native fail immediately, `pollAd` null | Expected today — iOS stubs. Not a configuration error. |
+| `pollAd` returns null | Normal when the buffer is empty — use the fallback load path. Check `start()` actually succeeded and that enough time has passed. |
+| iOS: an ad loads but nothing is drawn | Check the height reaching Yoga: a hosted view is sized only by `SetFlexAspectRatio`, never by a `SizedBox`. For a native ad pass `height:`. |

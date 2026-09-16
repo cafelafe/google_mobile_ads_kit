@@ -1,4 +1,4 @@
-package com.dartnative.mobile_ads
+package com.cafelafe.google_mobile_ads_kit
 
 import android.annotation.SuppressLint
 import android.content.Context
@@ -19,7 +19,7 @@ import org.json.JSONObject
  * Renders a native ad with one of the two built-in templates.
  *
  * The Next-Gen SDK ships no templates, so the layouts (`res/layout/
- * dn_native_ad_*.xml`) and this code belong to the plugin (doc/design.md §8-4).
+ * gmak_native_ad_*.xml`) and this code belong to the plugin (doc/design.md §8-4).
  *
  * ## The part that is not optional
  *
@@ -49,9 +49,9 @@ internal object NativeAdRenderer {
     fun render(context: Context, ad: NativeAd, style: JSONObject): NativeAdView {
         val templateType = style.optInt("templateType", TEMPLATE_SMALL)
         val layout = if (templateType == TEMPLATE_SMALL) {
-            R.layout.dn_native_ad_small
+            R.layout.gmak_native_ad_small
         } else {
-            R.layout.dn_native_ad_medium
+            R.layout.gmak_native_ad_medium
         }
 
         val view = LayoutInflater.from(context)
@@ -62,7 +62,7 @@ internal object NativeAdRenderer {
 
         // Last, and only after every asset view is assigned above: this is what
         // hands the SDK the view tree it measures and attaches click handling to.
-        view.registerNativeAd(ad, view.findViewById(R.id.dn_native_media))
+        view.registerNativeAd(ad, view.findViewById(R.id.gmak_native_media))
         return view
     }
 
@@ -75,18 +75,18 @@ internal object NativeAdRenderer {
      * assignment in one place.
      */
     private fun bindAssets(view: NativeAdView, ad: NativeAd) {
-        val headline = view.findViewById<TextView>(R.id.dn_native_headline)
+        val headline = view.findViewById<TextView>(R.id.gmak_native_headline)
         headline.text = ad.headline
         view.headlineView = headline
 
-        bindText(view.findViewById(R.id.dn_native_body), ad.body) {
+        bindText(view.findViewById(R.id.gmak_native_body), ad.body) {
             view.bodyView = it
         }
 
-        val cta = view.findViewById<Button>(R.id.dn_native_cta)
+        val cta = view.findViewById<Button>(R.id.gmak_native_cta)
         bindText(cta, ad.callToAction) { view.callToActionView = it }
 
-        val icon = view.findViewById<ImageView>(R.id.dn_native_icon)
+        val icon = view.findViewById<ImageView>(R.id.gmak_native_icon)
         val iconDrawable = ad.icon?.drawable
         if (iconDrawable != null) {
             icon.setImageDrawable(iconDrawable)
@@ -99,11 +99,11 @@ internal object NativeAdRenderer {
         view.iconView = icon
 
         // The medium template only.
-        view.findViewById<TextView>(R.id.dn_native_advertiser)?.let { advertiser ->
+        view.findViewById<TextView>(R.id.gmak_native_advertiser)?.let { advertiser ->
             bindText(advertiser, ad.advertiser) { view.advertiserView = it }
         }
 
-        val rating = view.findViewById<RatingBar>(R.id.dn_native_rating)
+        val rating = view.findViewById<RatingBar>(R.id.gmak_native_rating)
         val stars = ad.starRating
         if (rating != null) {
             if (stars != null && stars > 0) {
@@ -118,7 +118,7 @@ internal object NativeAdRenderer {
         // MediaView is present in the medium template only, but registerNativeAd
         // needs one either way, so the small template's null is handled by the
         // caller passing findViewById's result straight through.
-        view.findViewById<MediaView>(R.id.dn_native_media)?.let { media ->
+        view.findViewById<MediaView>(R.id.gmak_native_media)?.let { media ->
             media.visibility =
                 if (ad.mediaContent != null) View.VISIBLE else View.GONE
         }
@@ -143,7 +143,7 @@ internal object NativeAdRenderer {
     /** Applies the Dart-side [style] over the layout's defaults. */
     @SuppressLint("DiscouragedApi")
     private fun applyStyle(view: NativeAdView, style: JSONObject) {
-        val background = view.findViewById<View>(R.id.dn_native_background)
+        val background = view.findViewById<View>(R.id.gmak_native_background)
         val cornerRadius = style.optDouble("cornerRadius", Double.NaN)
 
         if (style.has("mainBackgroundColor")) {
@@ -161,19 +161,19 @@ internal object NativeAdRenderer {
         }
 
         applyTextStyle(
-            view.findViewById(R.id.dn_native_headline),
+            view.findViewById(R.id.gmak_native_headline),
             style.optJSONObject("primaryTextStyle"),
         )
         applyTextStyle(
-            view.findViewById(R.id.dn_native_body),
+            view.findViewById(R.id.gmak_native_body),
             style.optJSONObject("secondaryTextStyle"),
         )
         applyTextStyle(
-            view.findViewById(R.id.dn_native_advertiser),
+            view.findViewById(R.id.gmak_native_advertiser),
             style.optJSONObject("tertiaryTextStyle"),
         )
 
-        val cta = view.findViewById<Button>(R.id.dn_native_cta)
+        val cta = view.findViewById<Button>(R.id.gmak_native_cta)
         val ctaStyle = style.optJSONObject("callToActionTextStyle")
         applyTextStyle(cta, ctaStyle)
         // The call to action's background is its own: the button is the one

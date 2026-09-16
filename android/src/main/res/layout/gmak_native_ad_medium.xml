@@ -4,7 +4,7 @@
   the ad's media (image or video) and a full-width call to action.
 
   Written for this plugin rather than taken from google_mobile_ads; see the note
-  in dn_native_ad_small.xml.
+  in gmak_native_ad_small.xml.
 
   Ids are looked up by name in NativeAdRenderer.kt and must match; the MediaView
   is required even when the creative has no media, because
@@ -17,7 +17,7 @@
     android:layout_height="wrap_content">
 
     <LinearLayout
-        android:id="@+id/dn_native_background"
+        android:id="@+id/gmak_native_background"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:orientation="vertical"
@@ -30,7 +30,7 @@
             android:gravity="center_vertical">
 
             <ImageView
-                android:id="@+id/dn_native_icon"
+                android:id="@+id/gmak_native_icon"
                 android:layout_width="40dp"
                 android:layout_height="40dp"
                 android:adjustViewBounds="true"
@@ -45,7 +45,7 @@
                 android:layout_marginStart="10dp">
 
                 <TextView
-                    android:id="@+id/dn_native_headline"
+                    android:id="@+id/gmak_native_headline"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:maxLines="1"
@@ -54,7 +54,7 @@
                     android:textStyle="bold" />
 
                 <TextView
-                    android:id="@+id/dn_native_advertiser"
+                    android:id="@+id/gmak_native_advertiser"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:maxLines="1"
@@ -62,7 +62,7 @@
                     android:textSize="12sp" />
 
                 <RatingBar
-                    android:id="@+id/dn_native_rating"
+                    android:id="@+id/gmak_native_rating"
                     style="?android:attr/ratingBarStyleSmall"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
@@ -74,7 +74,7 @@
         </LinearLayout>
 
         <TextView
-            android:id="@+id/dn_native_body"
+            android:id="@+id/gmak_native_body"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="8dp"
@@ -83,7 +83,7 @@
             android:textSize="13sp" />
 
         <com.google.android.libraries.ads.mobile.sdk.nativead.MediaView
-            android:id="@+id/dn_native_media"
+            android:id="@+id/gmak_native_media"
             android:layout_width="match_parent"
             android:layout_height="0dp"
             android:layout_weight="1"
@@ -91,7 +91,7 @@
             android:layout_marginTop="8dp" />
 
         <Button
-            android:id="@+id/dn_native_cta"
+            android:id="@+id/gmak_native_cta"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="8dp"
