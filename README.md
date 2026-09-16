@@ -3,6 +3,10 @@
 Google Mobile Ads (AdMob) for [DartNative](https://dartnative.com) — the native
 Google Mobile Ads SDKs behind the familiar `google_mobile_ads` API. iOS and Android.
 
+<p align="center">
+  <img src="https://raw.githubusercontent.com/cafelafe/google_mobile_ads_kit/main/doc/images/example_ios.png" width="300" alt="The example app on iOS: full-screen ad controls, a 320x50 banner, an adaptive banner and a native ad template">
+</p>
+
 ## Why you'll like it
 
 - **Real native ads** — a banner or native ad is an `AdView` / `BannerView`
