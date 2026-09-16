@@ -16,6 +16,7 @@
 library;
 
 import 'dart:async';
+import 'dart:io' show Platform;
 
 import 'package:dartnative/dartnative.dart';
 import 'package:dartnative/plugin.dart';
@@ -33,7 +34,7 @@ import 'native_template_style.dart';
 abstract final class _NativeViewType {
   /// Resolved on first access — `claim` is idempotent for a given key, so the
   /// Dart and native sides agree without either hard-coding a number.
-  static final int nativeAd = ViewType.claim('dartnative_mobile_ads/native');
+  static final int nativeAd = ViewType.claim('google_mobile_ads_kit/native');
 }
 
 /// A native ad, placed directly in the widget tree.
@@ -60,7 +61,7 @@ abstract final class _NativeViewType {
 /// `MainActivity`:
 ///
 /// ```kotlin
-/// DartNativeMobileAdsPlugin.registerNativeAdFactory(
+/// GoogleMobileAdsKitPlugin.registerNativeAdFactory(
 ///   this, "adFactoryExample", MyNativeAdFactory(layoutInflater))
 /// ```
 ///
@@ -140,8 +141,16 @@ class NativeAd extends StatefulWidget {
   ///
   /// [TemplateType.small] is a single row; [TemplateType.medium] adds the ad's
   /// media above it.
-  static double defaultTemplateHeight(TemplateType type) =>
-      switch (type) { TemplateType.small => 90, TemplateType.medium => 350 };
+  ///
+  /// The small template's height differs per platform. On iOS its leading
+  /// square is a 120pt media view — AdMob requires a native video asset's media
+  /// view to be at least 120x120pt — so with padding it reserves 144. Android's
+  /// small row draws the 48dp icon there instead and stays at 90; reserving
+  /// more would only add blank space under the ad.
+  static double defaultTemplateHeight(TemplateType type) => switch (type) {
+        TemplateType.small => Platform.isIOS ? 144 : 90,
+        TemplateType.medium => 350,
+      };
 
   /// The height this ad will occupy, resolving the defaults described on
   /// [height].
@@ -237,6 +246,28 @@ class _NativeAdElement extends NativeElement {
   late final _NativeAdHandle _handle =
       _NativeAdHandle(adUnitId: _widget.adUnitId);
 
+  /// The width the last [SetFlexAspectRatio] was derived from.
+  double _emittedWidth = 0;
+
+  /// The width Yoga actually gave the container, once native reported it.
+  ///
+  /// `LayoutBuilder` reports the screen width rather than the slot's, so an
+  /// ad inside padding starts with a ratio that is too wide and a reserved
+  /// height that is too short by the same factor (144 came out as 130 in a
+  /// 20pt-padded column). The native container reports its real width after
+  /// Yoga's first pass, and the ratio is re-emitted from that. Because the
+  /// width does not change as a result, native does not report again, so the
+  /// correction settles in one round trip.
+  double? _nativeWidth;
+
+  /// Reserves [height] at [width] through the one sizing mutation a plugin
+  /// may emit (`doc/design.md` §8-6).
+  void _emitAspectRatio(int id, double width, double height) {
+    if (width <= 0 || height <= 0) return;
+    _emittedWidth = width;
+    emitMutation(SetFlexAspectRatio(id, width / height));
+  }
+
   @override
   int get viewType => _NativeViewType.nativeAd;
 
@@ -265,7 +296,7 @@ class _NativeAdElement extends NativeElement {
         _handle,
         const LoadAdError(
           -1,
-          'dartnative_mobile_ads',
+          'google_mobile_ads_kit',
           'The Mobile Ads SDK is not available on this platform.',
           null,
         ),
@@ -278,9 +309,8 @@ class _NativeAdElement extends NativeElement {
     // SizedBox is not enough, because that sizes the Dart-side box and not the
     // view inside it. A native ad's height is not derivable the way a banner's
     // is, so it comes from [NativeAd.resolvedHeight] (doc/design.md §8-6).
-    if (_widget.height > 0 && _widget.width > 0) {
-      emitMutation(SetFlexAspectRatio(id, _widget.width / _widget.height));
-    }
+    // The width is a first guess — see [_nativeWidth] for the correction.
+    _emitAspectRatio(id, _widget.width, _widget.height);
 
     _token = AdsFFIBindings.registerSink(_handleEvent);
 
@@ -318,6 +348,18 @@ class _NativeAdElement extends NativeElement {
         l.onAdLoaded?.call(_handle);
       case AdEventStatus.failedToLoad:
         l.onAdFailedToLoad?.call(_handle, loadErrorFromJson(payload));
+      case AdEventStatus.laidOut:
+        final double? width = (payload['width'] as num?)?.toDouble();
+        final int? id = viewId;
+        if (width == null || width <= 0 || id == null) return;
+        _nativeWidth = width;
+        if ((width - _emittedWidth).abs() > 0.5) {
+          _emitAspectRatio(id, width, _widget.height);
+          // The event arrives outside a build, and a mutation emitted then
+          // only sits in the queue; a dirty element is what makes the
+          // reconciler flush it and run layout again.
+          markDirty();
+        }
       case AdEventStatus.impression:
         l.onAdImpression?.call(_handle);
       case AdEventStatus.clicked:
@@ -343,13 +385,14 @@ class _NativeAdElement extends NativeElement {
     final _NativeAdView now = _widget;
 
     // Re-emit only when the shape actually changed; the reconciler calls this
-    // on every rebuild of the parent.
+    // on every rebuild of the parent. Once native has reported the real width,
+    // LayoutBuilder's guess is ignored — it is the same wrong number every
+    // rebuild, and would undo the correction.
     final int? id = viewId;
-    if (id != null &&
-        (now.width != old.width || now.height != old.height) &&
-        now.width > 0 &&
-        now.height > 0) {
-      emitMutation(SetFlexAspectRatio(id, now.width / now.height));
+    if (id == null) return;
+    final double? native = _nativeWidth;
+    if (now.height != old.height || (native == null && now.width != old.width)) {
+      _emitAspectRatio(id, native ?? now.width, now.height);
     }
   }
 

@@ -1,9 +1,9 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <application
-        android:label="dartnative_mobile_ads_example"
+        android:label="google_mobile_ads_kit_example"
         android:name=".Application"
         android:icon="@mipmap/ic_launcher">
-        <!-- Required by dartnative_mobile_ads. The Next-Gen SDK takes the App ID
+        <!-- Required by google_mobile_ads_kit. The Next-Gen SDK takes the App ID
              from code, but the plugin reads it from here so that initialize()
              needs no argument, exactly as in google_mobile_ads. Without this
              entry initialize() reports an error and no ad ever loads.

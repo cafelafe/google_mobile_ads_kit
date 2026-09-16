@@ -1,7 +1,7 @@
 @TestOn('vm')
 library;
 
-import 'package:dartnative_mobile_ads/src/ads_ffi_bindings.dart';
+import 'package:google_mobile_ads_kit/src/ads_ffi_bindings.dart';
 import 'package:test/test.dart';
 
 /// Covers the startup path the generated plugin registrant runs.

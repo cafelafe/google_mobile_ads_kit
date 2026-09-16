@@ -15,7 +15,7 @@ Claude Code picks these up automatically. Other agents may need
 ## Shipped to consumers (lives elsewhere)
 
 The skill for people **using** this package is not in this directory. It is at
-[`../../skills/dartnative-mobile-ads-usage/SKILL.md`](../../skills/dartnative-mobile-ads-usage/SKILL.md)
+[`../../skills/google-mobile-ads-kit-usage/SKILL.md`](../../skills/google-mobile-ads-kit-usage/SKILL.md)
 — the top-level `skills/` folder is the layout the Dart `skills` CLI discovers,
 so an app that depends on this package installs it with `dart run skills@ get`.
 Scaffolded with `dart run skills@ create`; keep the directory name and the

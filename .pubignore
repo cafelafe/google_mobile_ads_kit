@@ -30,6 +30,10 @@ migrate_working_dir/
 .dn-plugins-dependencies
 /build/
 /coverage/
+# `dn plugin build` output. The artifact is published with `dn plugin publish`,
+# never carried inside the Dart package — it is tens of megabytes of .aar and
+# xcframework.
+/dist/
 
 # --- repository-only ---
 # The research log behind doc/design.md. Contributor material, like CLAUDE.md:

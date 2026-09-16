@@ -1,4 +1,4 @@
-import 'package:dartnative_mobile_ads/src/ad_error.dart';
+import 'package:google_mobile_ads_kit/src/ad_error.dart';
 import 'package:test/test.dart';
 
 void main() {

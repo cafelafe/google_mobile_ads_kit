@@ -1,25 +1,27 @@
 #
 # To learn more about a Podspec see http://guides.cocoapods.org/syntax/podspec.html.
-# Run `pod lib lint dartnative_mobile_ads.podspec` to validate before publishing.
+# Run `pod lib lint google_mobile_ads_kit.podspec` to validate before publishing.
 #
 Pod::Spec.new do |s|
-  s.name             = 'dartnative_mobile_ads'
+  s.name             = 'google_mobile_ads_kit'
   s.version          = '0.1.0'
   s.summary          = 'Google Mobile Ads (AdMob) for DartNative apps.'
   s.description      = <<-DESC
 Google Mobile Ads (AdMob) for DartNative apps. Wraps the native Google Mobile
 Ads SDK over dart:ffi — no platform channels. The API follows google_mobile_ads.
                        DESC
-  s.homepage         = 'https://github.com/cafelafe/dartnative_mobile_ads'
+  s.homepage         = 'https://github.com/cafelafe/google_mobile_ads_kit'
   s.license          = { :file => '../LICENSE' }
   s.author           = 'cafelafe'
 
   s.source           = { :path => '.' }
   s.source_files     = 'Classes/**/*'
 
-  # iOS 13 is the Google Mobile Ads SDK v13 floor and matches the plugin's
-  # declared minimum (doc/design.md §1-2).
-  s.platform         = :ios, '13.0'
+  # iOS 15 because Xcode 27 refuses to build anything older ("the range of
+  # supported deployment target versions is 15.0 to 27.0.x"), not because the
+  # SDK needs it — Google-Mobile-Ads-SDK 13.x itself still declares 12.0.
+  # Raising this is what the toolchain permits; see doc/design.md §1-2.
+  s.platform         = :ios, '15.0'
   s.swift_version    = '5.0'
 
   s.frameworks       = 'Foundation', 'UIKit', 'AdSupport', 'AppTrackingTransparency'
@@ -29,8 +31,15 @@ Ads SDK over dart:ffi — no platform channels. The API follows google_mobile_ad
   # requires macOS + Xcode for this plugin (doc/design.md §11).
   #
   # Pinned to v13: v12 renamed the Swift API from GADMobileAds to MobileAds and
-  # DNMobileAds.swift is written against the new spelling (doc/design.md §9-2).
+  # GMAKMobileAds.swift is written against the new spelling (doc/design.md §9-2).
   s.dependency 'Google-Mobile-Ads-SDK', '~> 13.0'
+
+  # Required because the Mobile Ads SDK (and the User Messaging Platform it
+  # pulls in) ship as static frameworks. Without this, an app using
+  # `use_frameworks!` fails at `pod install` with "has transitive dependencies
+  # that include statically linked binaries" — it never reaches a compiler.
+  # `google_mobile_ads` declares the same thing for the same reason.
+  s.static_framework = true
 
   # The @_cdecl entry points have no compile-time references — Dart looks them
   # up at runtime — so the Release linker would otherwise strip them.

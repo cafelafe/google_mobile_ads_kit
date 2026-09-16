@@ -23,7 +23,7 @@ import 'full_screen_ad.dart' show loadErrorFromJson;
 abstract final class _BannerViewType {
   /// Resolved on first access — `claim` is idempotent for a given key, so the
   /// Dart and native sides agree without either hard-coding a number.
-  static final int banner = ViewType.claim('dartnative_mobile_ads/banner');
+  static final int banner = ViewType.claim('google_mobile_ads_kit/banner');
 }
 
 /// A banner ad, placed directly in the widget tree.
@@ -172,7 +172,7 @@ class _BannerAdElement extends NativeElement {
         _handle,
         const LoadAdError(
           -1,
-          'dartnative_mobile_ads',
+          'google_mobile_ads_kit',
           'The Mobile Ads SDK is not available on this platform.',
           null,
         ),

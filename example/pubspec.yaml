@@ -1,5 +1,5 @@
-name: dartnative_mobile_ads_example
-description: "Example app for dartnative_mobile_ads: the full-screen ad formats."
+name: google_mobile_ads_kit_example
+description: "Example app for google_mobile_ads_kit: the full-screen ad formats."
 publish_to: 'none'
 version: 0.1.0+1
 
@@ -10,8 +10,10 @@ environment:
 # installed SDK (closed resolution) — no registry setup, works offline.
 dependencies:
   dartnative: ^1.0.0
-  dartnative_mobile_ads:
+  google_mobile_ads_kit:
     path: ../
+  dartnative_ios: ^1.0.0
+  dartnative_android: ^1.0.0
   # The platform bindings. Required even though nothing imports them: the app
   # build resolves each as a Gradle/Xcode module, and dropping dartnative_android
   # takes the engine .aar — and with it Material, AppCompat and the app's theme
@@ -20,8 +22,6 @@ dependencies:
   # NOTE: `dn pub get` run from the plugin root rewrites this file and strips
   # these three. If the app suddenly fails with "Theme.Material3.* not found",
   # check here first.
-  dartnative_ios: ^1.0.0
-  dartnative_android: ^1.0.0
   # Skia GPU canvas: SkSL runtime shaders and rich shaped text. Adds about
   # 9 MB to an iPhone app; on Android the library is already in the platform
   # binding. For shapes, paths and charts use CustomPaint, which is native
@@ -57,3 +57,7 @@ dartnative:
 
 # Branded launch splash + app icon: add the dartnative_splash plugin from
 # dartpub.dev, then see tool/generate_app_assets.dart.
+
+dependency_overrides:
+  dartnative:
+    path: .dart_tool/dartnative_sdk/dartnative

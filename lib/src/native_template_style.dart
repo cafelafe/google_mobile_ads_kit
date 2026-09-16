@@ -25,7 +25,8 @@ enum NativeTemplateFontStyle {
 enum TemplateType {
   /// A compact layout: icon, headline, one line of body, call to action.
   ///
-  /// About 90dp tall — see [NativeAd.defaultTemplateHeight].
+  /// About 144 logical pixels tall on iOS and 90 on Android — see
+  /// [NativeAd.defaultTemplateHeight].
   small,
 
   /// A taller layout that also shows the ad's media (image or video).

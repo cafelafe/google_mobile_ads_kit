@@ -1,4 +1,4 @@
-package com.dartnative.mobile_ads
+package com.cafelafe.google_mobile_ads_kit
 
 import android.view.View
 import androidx.annotation.Keep

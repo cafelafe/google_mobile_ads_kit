@@ -20,14 +20,14 @@
 #include <cstdint>
 #include <cstring>
 
-#define LOG_TAG "dartnative_mobile_ads"
+#define LOG_TAG "google_mobile_ads_kit"
 #define LOGE(...) __android_log_print(ANDROID_LOG_ERROR, LOG_TAG, __VA_ARGS__)
 
 namespace {
 
 JavaVM* g_vm = nullptr;
 
-// Global ref to com.dartnative.mobile_ads.AdsBridge, plus its static methods.
+// Global ref to com.cafelafe.google_mobile_ads_kit.AdsBridge, plus its static methods.
 // Resolved once in JNI_OnLoad, where the class loader is guaranteed to be the
 // app's own — looking the class up later from an SDK thread would find only
 // the system loader and fail.
@@ -133,7 +133,7 @@ extern "C" JNIEXPORT jint JNICALL JNI_OnLoad(JavaVM* vm, void* /*reserved*/) {
     return JNI_ERR;
   }
 
-  jclass local = env->FindClass("com/dartnative/mobile_ads/AdsBridge");
+  jclass local = env->FindClass("com/cafelafe/google_mobile_ads_kit/AdsBridge");
   if (local == nullptr) {
     ClearPendingException(env);
     LOGE("AdsBridge class not found; ad calls will be inert");
@@ -184,11 +184,11 @@ extern "C" JNIEXPORT jint JNICALL JNI_OnLoad(JavaVM* vm, void* /*reserved*/) {
 // Dart -> native
 // ---------------------------------------------------------------------------
 
-#define DN_EXPORT extern "C" __attribute__((visibility("default"))) __attribute__((used))
+#define GMAK_EXPORT extern "C" __attribute__((visibility("default"))) __attribute__((used))
 
 // Hands the Dart dispatcher pointer to Kotlin, which stores it in a slot
 // alongside the current isolate generation.
-DN_EXPORT void DNAdsSetDispatcher(int64_t callback_ptr) {
+GMAK_EXPORT void GMAKSetDispatcher(int64_t callback_ptr) {
   JNIEnv* env = GetEnv();
   if (env == nullptr || !BridgeReady()) return;
 
@@ -203,7 +203,7 @@ DN_EXPORT void DNAdsSetDispatcher(int64_t callback_ptr) {
   ClearPendingException(env);
 }
 
-DN_EXPORT void DNAdsInitialize(int64_t token) {
+GMAK_EXPORT void GMAKInitialize(int64_t token) {
   JNIEnv* env = GetEnv();
   if (env == nullptr || !BridgeReady() || g_initialize == nullptr) return;
 
@@ -212,7 +212,7 @@ DN_EXPORT void DNAdsInitialize(int64_t token) {
   ClearPendingException(env);
 }
 
-DN_EXPORT void DNAdsLoadAd(int64_t token, int32_t format, const char* ad_unit_id,
+GMAK_EXPORT void GMAKLoadAd(int64_t token, int32_t format, const char* ad_unit_id,
                            const char* request_json) {
   JNIEnv* env = GetEnv();
   if (env == nullptr || !BridgeReady() || g_load_ad == nullptr) return;
@@ -226,7 +226,7 @@ DN_EXPORT void DNAdsLoadAd(int64_t token, int32_t format, const char* ad_unit_id
   ClearPendingException(env);
 }
 
-DN_EXPORT void DNAdsShowAd(int64_t token) {
+GMAK_EXPORT void GMAKShowAd(int64_t token) {
   JNIEnv* env = GetEnv();
   if (env == nullptr || !BridgeReady() || g_show_ad == nullptr) return;
 
@@ -235,7 +235,7 @@ DN_EXPORT void DNAdsShowAd(int64_t token) {
   ClearPendingException(env);
 }
 
-DN_EXPORT void DNAdsDisposeAd(int64_t token) {
+GMAK_EXPORT void GMAKDisposeAd(int64_t token) {
   JNIEnv* env = GetEnv();
   if (env == nullptr || !BridgeReady() || g_dispose_ad == nullptr) return;
 
@@ -244,7 +244,7 @@ DN_EXPORT void DNAdsDisposeAd(int64_t token) {
   ClearPendingException(env);
 }
 
-DN_EXPORT void DNAdsSetAppMuted(int32_t muted) {
+GMAK_EXPORT void GMAKSetAppMuted(int32_t muted) {
   JNIEnv* env = GetEnv();
   if (env == nullptr || !BridgeReady() || g_set_app_muted == nullptr) return;
 
@@ -253,7 +253,7 @@ DN_EXPORT void DNAdsSetAppMuted(int32_t muted) {
   ClearPendingException(env);
 }
 
-DN_EXPORT void DNAdsSetImmersiveMode(int64_t token, int32_t enabled) {
+GMAK_EXPORT void GMAKSetImmersiveMode(int64_t token, int32_t enabled) {
   JNIEnv* env = GetEnv();
   if (env == nullptr || !BridgeReady() || g_set_immersive_mode == nullptr) {
     return;
@@ -265,7 +265,7 @@ DN_EXPORT void DNAdsSetImmersiveMode(int64_t token, int32_t enabled) {
   ClearPendingException(env);
 }
 
-DN_EXPORT void DNAdsSetServerSideVerification(int64_t token,
+GMAK_EXPORT void GMAKSetServerSideVerification(int64_t token,
                                               const char* user_id,
                                               const char* custom_data) {
   JNIEnv* env = GetEnv();
@@ -282,7 +282,7 @@ DN_EXPORT void DNAdsSetServerSideVerification(int64_t token,
 // Banners
 // ---------------------------------------------------------------------------
 
-DN_EXPORT void DNAdsBannerCreate(int64_t token, int64_t view_id,
+GMAK_EXPORT void GMAKBannerCreate(int64_t token, int64_t view_id,
                                  const char* ad_unit_id,
                                  const char* request_json, int32_t width_dp,
                                  int32_t height_dp) {
@@ -299,7 +299,7 @@ DN_EXPORT void DNAdsBannerCreate(int64_t token, int64_t view_id,
   ClearPendingException(env);
 }
 
-DN_EXPORT void DNAdsBannerDispose(int64_t view_id) {
+GMAK_EXPORT void GMAKBannerDispose(int64_t view_id) {
   JNIEnv* env = GetEnv();
   if (env == nullptr || !BridgeReady() || g_banner_dispose == nullptr) return;
 
@@ -312,7 +312,7 @@ DN_EXPORT void DNAdsBannerDispose(int64_t view_id) {
 // Native ads
 // ---------------------------------------------------------------------------
 
-DN_EXPORT void DNAdsNativeAdCreate(int64_t token, int64_t view_id,
+GMAK_EXPORT void GMAKNativeAdCreate(int64_t token, int64_t view_id,
                                    const char* ad_unit_id,
                                    const char* request_json,
                                    const char* options_json) {
@@ -329,7 +329,7 @@ DN_EXPORT void DNAdsNativeAdCreate(int64_t token, int64_t view_id,
   ClearPendingException(env);
 }
 
-DN_EXPORT void DNAdsNativeAdDispose(int64_t view_id) {
+GMAK_EXPORT void GMAKNativeAdDispose(int64_t view_id) {
   JNIEnv* env = GetEnv();
   if (env == nullptr || !BridgeReady() || g_native_ad_dispose == nullptr) {
     return;
@@ -340,7 +340,7 @@ DN_EXPORT void DNAdsNativeAdDispose(int64_t view_id) {
   ClearPendingException(env);
 }
 
-DN_EXPORT int32_t DNAdsAdaptiveBannerHeight(int32_t width_dp) {
+GMAK_EXPORT int32_t GMAKAdaptiveBannerHeight(int32_t width_dp) {
   JNIEnv* env = GetEnv();
   if (env == nullptr || !BridgeReady() ||
       g_adaptive_banner_height == nullptr) {
@@ -360,7 +360,7 @@ DN_EXPORT int32_t DNAdsAdaptiveBannerHeight(int32_t width_dp) {
 // Preloading
 // ---------------------------------------------------------------------------
 
-DN_EXPORT void DNAdsPreloadStart(int64_t token, int32_t format,
+GMAK_EXPORT void GMAKPreloadStart(int64_t token, int32_t format,
                                  const char* preload_id, const char* ad_unit_id,
                                  const char* request_json, int32_t buffer_size) {
   JNIEnv* env = GetEnv();
@@ -376,7 +376,7 @@ DN_EXPORT void DNAdsPreloadStart(int64_t token, int32_t format,
   ClearPendingException(env);
 }
 
-DN_EXPORT int64_t DNAdsPreloadPoll(int32_t format, const char* preload_id) {
+GMAK_EXPORT int64_t GMAKPreloadPoll(int32_t format, const char* preload_id) {
   JNIEnv* env = GetEnv();
   if (env == nullptr || !BridgeReady() || g_preload_poll == nullptr) return 0;
 
@@ -390,7 +390,7 @@ DN_EXPORT int64_t DNAdsPreloadPoll(int32_t format, const char* preload_id) {
   return static_cast<int64_t>(token);
 }
 
-DN_EXPORT int32_t DNAdsPreloadIsAdAvailable(int32_t format,
+GMAK_EXPORT int32_t GMAKPreloadIsAdAvailable(int32_t format,
                                             const char* preload_id) {
   JNIEnv* env = GetEnv();
   if (env == nullptr || !BridgeReady() || g_preload_is_available == nullptr) {
@@ -408,7 +408,7 @@ DN_EXPORT int32_t DNAdsPreloadIsAdAvailable(int32_t format,
   return available == JNI_TRUE ? 1 : 0;
 }
 
-DN_EXPORT int32_t DNAdsPreloadNumAdsAvailable(int32_t format,
+GMAK_EXPORT int32_t GMAKPreloadNumAdsAvailable(int32_t format,
                                               const char* preload_id) {
   JNIEnv* env = GetEnv();
   if (env == nullptr || !BridgeReady() || g_preload_num_available == nullptr) {
@@ -426,7 +426,7 @@ DN_EXPORT int32_t DNAdsPreloadNumAdsAvailable(int32_t format,
   return static_cast<int32_t>(count);
 }
 
-DN_EXPORT void DNAdsPreloadDestroy(int32_t format, const char* preload_id) {
+GMAK_EXPORT void GMAKPreloadDestroy(int32_t format, const char* preload_id) {
   JNIEnv* env = GetEnv();
   if (env == nullptr || !BridgeReady() || g_preload_destroy == nullptr) return;
 
@@ -436,7 +436,7 @@ DN_EXPORT void DNAdsPreloadDestroy(int32_t format, const char* preload_id) {
   ClearPendingException(env);
 }
 
-DN_EXPORT void DNAdsPreloadDestroyAll(int32_t format) {
+GMAK_EXPORT void GMAKPreloadDestroyAll(int32_t format) {
   JNIEnv* env = GetEnv();
   if (env == nullptr || !BridgeReady() || g_preload_destroy_all == nullptr) {
     return;
@@ -452,7 +452,7 @@ DN_EXPORT void DNAdsPreloadDestroyAll(int32_t format) {
 // Returns the byte count written, 0 when there is nothing to report, or the
 // negative required capacity when `capacity` is too small. Dart owns the
 // buffer, so nothing has to be freed across the FFI boundary.
-DN_EXPORT int32_t DNAdsPreloadReadJson(int32_t format, int32_t query,
+GMAK_EXPORT int32_t GMAKPreloadReadJson(int32_t format, int32_t query,
                                        const char* preload_id, uint8_t* buffer,
                                        int32_t capacity) {
   JNIEnv* env = GetEnv();
@@ -499,7 +499,7 @@ DN_EXPORT int32_t DNAdsPreloadReadJson(int32_t format, int32_t query,
 // `dispatcher_ptr` is the live isolate's — see AdsBridge.deliver. Dart's
 // `Pointer.fromFunction` callbacks must run on the owning isolate's thread.
 extern "C" JNIEXPORT void JNICALL
-Java_com_dartnative_mobile_1ads_AdsBridge_nativeDeliver(
+Java_com_cafelafe_google_1mobile_1ads_1kit_AdsBridge_nativeDeliver(
     JNIEnv* env, jclass /*clazz*/, jlong dispatcher_ptr, jlong token,
     jint status, jstring payload) {
   if (dispatcher_ptr == 0) return;

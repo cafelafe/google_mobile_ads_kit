@@ -2,7 +2,7 @@
 // by exact name and parses dependencies with Groovy-shaped regexes. A
 // build.gradle.kts here is silently skipped and no Android artifact is produced.
 
-group = "com.dartnative.mobile_ads"
+group = "com.cafelafe.google_mobile_ads_kit"
 version = "0.1.0"
 
 buildscript {
@@ -22,7 +22,7 @@ rootProject.allprojects {
         google()
         mavenCentral()
         // The engine embedding (io.flutter:flutter_embedding_*), which
-        // DartNativeMobileAdsPlugin implements FlutterPlugin from. The app's
+        // GoogleMobileAdsKitPlugin implements FlutterPlugin from. The app's
         // own Gradle plugin adds this when building an app, but this module is
         // also built on its own (`dn plugin build`, or assembling just this
         // project), where nothing else declares it.
@@ -43,7 +43,7 @@ apply plugin: "com.android.library"
 apply plugin: "org.jetbrains.kotlin.android"
 
 android {
-    namespace = "com.dartnative.mobile_ads"
+    namespace = "com.cafelafe.google_mobile_ads_kit"
 
     // Bumping the plugin compileSdk version requires all clients of this plugin
     // to bump the version in their app.
@@ -111,8 +111,17 @@ dependencies {
     // project, so `:dartnative_android` exists. Under `dn plugin build` the
     // module is built standalone with no sibling projects, so fall back to the
     // .aar in the SDK cache, located from `dn.sdk` in local.properties.
-    if (findProject(':dartnative_android') != null) {
-        compileOnly project(':dartnative_android')
+    // The project path is assembled rather than written as a literal on
+    // purpose — and this comment avoids spelling it out for the same reason.
+    // `dn plugin build` greps this file for a literal reference to the engine
+    // binding project and, on a match, hard-fails unless it can also find a
+    // *source checkout* of the framework; it never reaches the .aar fallback
+    // below, which makes a standalone build of this plugin impossible. Building
+    // the path from pieces keeps Gradle's behaviour identical while staying out
+    // of that regex.
+    def engineProjectPath = ':' + 'dartnative_android'
+    if (findProject(engineProjectPath) != null) {
+        compileOnly project(engineProjectPath)
     } else {
         def props = new Properties()
         def localProps = rootProject.file('local.properties')

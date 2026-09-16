@@ -1,4 +1,4 @@
-package com.dartnative.mobile_ads
+package com.cafelafe.google_mobile_ads_kit
 
 import android.content.Context
 import io.flutter.embedding.engine.plugins.FlutterPlugin
@@ -18,7 +18,7 @@ import io.flutter.embedding.engine.plugins.FlutterPlugin
  *
  * DartNative reuses the Flutter tool's Android registration plumbing: the
  * generated `io.flutter.plugins.GeneratedPluginRegistrant` calls
- * `flutterEngine.getPlugins().add(new DartNativeMobileAdsPlugin())`, and that
+ * `flutterEngine.getPlugins().add(new GoogleMobileAdsKitPlugin())`, and that
  * `add()` takes a `FlutterPlugin`. DartNative's own first-party
  * `com.dartnative.DartNativeAndroidPlugin` implements the same interface. It is
  * a registration hook only — no method channels are involved, and no Flutter
@@ -28,7 +28,7 @@ import io.flutter.embedding.engine.plugins.FlutterPlugin
  * (`createView(Int)` / `handleMutation(Long, Int, ByteArray)`) for those, not
  * this class. Ad logic lives in AdsBridge.
  */
-class DartNativeMobileAdsPlugin : FlutterPlugin {
+class GoogleMobileAdsKitPlugin : FlutterPlugin {
 
     companion object {
         /**
@@ -38,7 +38,7 @@ class DartNativeMobileAdsPlugin : FlutterPlugin {
          * from your Activity's `onCreate`:
          *
          * ```kotlin
-         * DartNativeMobileAdsPlugin.registerNativeAdFactory(
+         * GoogleMobileAdsKitPlugin.registerNativeAdFactory(
          *     this, "adFactoryExample", MyNativeAdFactory(layoutInflater))
          * ```
          *
@@ -79,7 +79,7 @@ class DartNativeMobileAdsPlugin : FlutterPlugin {
         // Triggers JNI_OnLoad in src/ads_bridge.cpp, which caches the JVM and
         // resolves AdsBridge's method IDs while the app's own class loader is
         // still the one in context.
-        System.loadLibrary("dartnative_mobile_ads")
+        System.loadLibrary("google_mobile_ads_kit")
     }
 
     override fun onDetachedFromEngine(binding: FlutterPlugin.FlutterPluginBinding) {

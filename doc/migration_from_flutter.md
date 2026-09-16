@@ -7,10 +7,6 @@ follows from one fact: DartNative mounts **real native views** instead of
 compositing them through a PlatformView, and most differences make the code
 shorter.
 
-> **🚧 Status:** everything below works on Android and is verified on a device.
-> iOS is written but has never been compiled; see the
-> [README status table](../README.md#supported-formats).
-
 ---
 
 ## 1. Banner placement — `AdWidget` is gone
@@ -99,11 +95,11 @@ the registration call changing**, because DartNative has no `FlutterEngine`:
 // Flutter
 GoogleMobileAdsPlugin.registerNativeAdFactory(engine, "adFactoryExample", factory)
 // DartNative
-DartNativeMobileAdsPlugin.registerNativeAdFactory(this, "adFactoryExample", factory)
+GoogleMobileAdsKitPlugin.registerNativeAdFactory(this, "adFactoryExample", factory)
 ```
 
 The Dart call is identical (`NativeAd(adUnitId: ..., factoryId: 'adFactoryExample', ...)`).
-Inside the factory: change the import to `com.dartnative.mobile_ads.NativeAdFactory`,
+Inside the factory: change the import to `com.cafelafe.google_mobile_ads_kit.NativeAdFactory`,
 and note the SDK classes come from the Next-Gen package
 (`com.google.android.libraries.ads.mobile.sdk.nativead.*`), not
 `com.google.android.gms.ads.nativead.*`.
@@ -121,8 +117,13 @@ mainBackgroundColor: 0xFFFFFFFF,     // DartNative
 reserves one — the template default, or the `height` you pass. Pass it
 explicitly with `factoryId`; only you know how tall your layout is.
 
+On iOS the same factory shape applies, registered with
+`GMAKMobileAds.registerNativeAdFactory("adFactoryExample", factory: MyFactory())`
+in `AppDelegate`. The plugin sets `nativeAd` on the returned view for you, so
+your factory only assigns the asset views.
+
 Not exposed: `shouldRequestMultipleImages`, `requestCustomMuteThisAd` (the
-Next-Gen request builder has no equivalent). **Android only** for now.
+Next-Gen request builder has no equivalent).
 
 ## 5. Preloading — same shape, one extra preloader
 
@@ -130,8 +131,10 @@ Next-Gen request builder has no equivalent). **Android only** for now.
 the `start` / `pollAd` / `isAdAvailable` / `getNumAdsAvailable` /
 `getConfiguration` / `getConfigurations` / `destroy` / `destroyAll` surface, so
 preloading code ports unchanged. `RewardedInterstitialAdPreloader` is added
-(the Next-Gen SDK supports it). **Android only** for now: on iOS `pollAd`
-returns null, so a call site that falls back to `load()` keeps working.
+(the Next-Gen SDK supports it) — **on iOS as well**, which upstream's plugin
+does not wire. iOS preloading uses the SDK's Beta module, so its API may shift
+between SDK releases. Keep the `pollAd == null` fallback regardless: an empty
+buffer is an ordinary outcome.
 
 ## 6. Lists — check your placement
 
@@ -163,4 +166,5 @@ for you.
 | `AdWidget` | No PlatformView — the widget mounts the native view itself |
 | `ad.load()` on banners / native ads | Handled by the widget lifecycle |
 | `AdManagerBannerAd` etc., mediation adapters | Ad Manager and mediation are out of scope for 1.0 |
+| Inline adaptive and collapsible banners | Not implemented in 1.0; anchored adaptive banners are |
 | `USE_NEXT_GEN_SDK` dart-define | Android is always the Next-Gen SDK; a prebuilt plugin cannot switch at app build time |

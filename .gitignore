@@ -38,3 +38,6 @@ migrate_working_dir/
 .dn-plugins-dependencies
 /build/
 /coverage/
+
+# `dn plugin build` output: the distributable tarball plus its scratch dirs.
+/dist/

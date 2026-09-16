@@ -68,6 +68,12 @@ build.gradle を手で書き換える必要がある。既存ディレクトリ�
 | C シンボル | `DN<Name><Verb>`（例: `DNShareText`） |
 | ネイティブライブラリ | `lib<package>.so` |
 
+> **注意**: 上はチュートリアル由来の規約。サードパーティは `dartnative_` プレフィックスを
+> 名乗れないため、この repo は `google_mobile_ads_kit` / `GoogleMobileAdsKitPlugin` /
+> C シンボル `GMAK<Verb>` / Swift 型 `GMAK*` / Android リソース `gmak_native_*` /
+> Android パッケージ `com.cafelafe.google_mobile_ads_kit` を使う。
+> エンジン側 API（`DNRegisterPluginProvider`、`DNViewTypeClaim` など）の `DN` は変えない。
+
 ---
 
 ## 2. pubspec のマニフェスト
@@ -406,6 +412,14 @@ emitMutation(PluginMutation(viewId!, _Tag.configure, bytes));
   （`SetFlexHeight` / `SetFlexWidth` は `plugin.dart` から非公開）。
   高さしか分からない場合は `LayoutBuilder` で幅を取り、比率にして渡す。
   `doc/design.md` §8-7
+- **`LayoutBuilder` の幅は画面幅であってスロット幅ではない。** パディングの中に
+  置くと比率が広すぎになり、Yoga の出す高さがその分縮む（20pt パディングで
+  144 → 130）。正確にしたければネイティブのコンテナが Yoga に配置された実幅を
+  イベントで返し、Dart が `SetFlexAspectRatio(実幅 / 高さ)` を再送する。
+  幅は変わらないので 1 往復で収束する。`doc/design.md` §8-6
+- **フレーム外で `emitMutation` しただけでは反映されない。** ネイティブからの
+  イベント経由など build の外で emit した mutation はキューに入るだけで、
+  次の reconcile まで flush されない。直後に `markDirty()` を呼ぶこと。
 
 ### 7-5. ⚠️ リサイクルされるリスト内での注意
 

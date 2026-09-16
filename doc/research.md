@@ -1,414 +1,496 @@
-# 調査記録 — DartNative プラグイン開発の技術的前提
+# Research log — the technical groundwork for DartNative plugin development
 
-> **この文書は「調査の記録」であり、設計判断は [`design.md`](design.md) にある。**
-> 設計書の根拠を確かめたいとき、または DartNative の内部仕様を調べ直す前に読む。
-> 同じ調査を繰り返さないために残している。
+> **This document is a record of research; the design decisions live in
+> [`design.md`](design.md).** Read it when you want to check the evidence behind
+> the design spec, or before re-investigating DartNative internals. It exists so
+> the same research is not repeated.
 >
-> 出典は `[dart-src]`（SDK 同梱 Dart ソース）/ `[bytecode]`（AAR を `javap`）/
-> `[disasm]`（`.so` を `llvm-objdump`）/ `[tutorial]`（公式チュートリアル）/ `[推測]` で明示。
+> Sources are tagged `[dart-src]` (Dart source bundled with the SDK) /
+> `[bytecode]` (`javap` on an AAR) / `[disasm]` (`llvm-objdump` on a `.so`) /
+> `[tutorial]` (official tutorial) / `[inferred]`.
 >
-> **⚠️ 実装後（2026-09-15）に覆った箇所がある。** 本書は調査「時点」の記録として残し、
-> 実装で判明した事実と食い違う場合は **`design.md` の各節が正**。覆った箇所には
-> 「実装で覆った」注記を付けている（§14-4 など）。設計時の素案（旧 §3〜§10）は
-> `design.md` に確定版があるため、本書では根拠となる証拠だけを残して圧縮した。
-> リポジトリのみに置き、配布物には含めない（`.pubignore`）。
+> **⚠️ Some findings were overturned after implementation (2026-09-15).** This
+> document is kept as a record of what was known *at the time*; where it
+> conflicts with what the implementation revealed, **the corresponding section
+> of `design.md` is authoritative**. Overturned findings are marked "overturned
+> by implementation" (e.g. §14-4). The design drafts from research time (old
+> §3–§10) have their final form in `design.md`, so here they are compressed down
+> to the supporting evidence. Repository only; not shipped (`.pubignore`).
 
-- 調査日: 2026-09-15 ／ 対象: DartNative 3.45.0-0.1.pre / Dart 3.12.0-192.0.dev
-- `<SDK>` はインストール済み DartNative SDK のルート（`dirname $(dirname $(which dn))`、既定 `~/zero`）
+- Researched: 2026-09-15 / Targets: DartNative 3.45.0-0.1.pre / Dart 3.12.0-192.0.dev
+- `<SDK>` is the root of the installed DartNative SDK
+  (`dirname $(dirname $(which dn))`, default `~/zero`)
 
-## 結論サマリ（AdMob 6 フォーマットの実現可否 → 実装結果）
+## Summary (feasibility of the six AdMob formats → outcome)
 
-| フォーマット | 調査時の評価 | 結果（Android） |
+| Format | Assessment at research time | Outcome (Android) |
 |---|---|---|
-| Interstitial / Rewarded / Rewarded Interstitial / App Open | 🟢 容易。ビュー不要 | ✅ |
-| Banner（固定 / アダプティブ） | 🟢 / 🟡 intrinsic size は報告不可だが高さは事前に求まる | ✅ |
-| Banner in `FastList` | 🟠 リサイクルで再リクエスト | ⚠️ 遅延破棄で緩和。README で非推奨案内 |
-| Native Ads（テンプレート / カスタム） | 🟡 ネイティブでレイアウトを書く（Flutter 版と同じ） | ✅ validator 合格 |
+| Interstitial / Rewarded / Rewarded Interstitial / App Open | 🟢 Easy; no view needed | ✅ |
+| Banner (fixed / adaptive) | 🟢 / 🟡 Cannot report an intrinsic size, but the height is known up front | ✅ |
+| Banner in `FastList` | 🟠 Recycling re-requests | ⚠️ Mitigated by deferred teardown; README discourages it |
+| Native Ads (template / custom) | 🟡 Write the layout natively (same as Flutter) | ✅ Validator passed |
 
 ---
 
-## 0. 最初に読む人へ：DartNative は Flutter ではない
+## 0. Read this first: DartNative is not Flutter
 
-DartNative は 2026 年登場で LLM の学習データにほぼ無い。AI は高確率で「Flutter のつもりで」
-**存在しない API を自信を持って提案する**。
+DartNative appeared in 2026 and is almost entirely absent from LLM training
+data. An AI will, with high probability, **confidently propose non-existent
+APIs** on the assumption that it is Flutter.
 
 | | Flutter | DartNative |
 |---|---|---|
-| ネイティブビュー | PlatformView（合成） | **ネイティブビューを直接ツリーに挿入** |
-| Dart ↔ ネイティブ | MethodChannel（非同期） | **dart:ffi 直呼び（同期）** |
-| レイアウト / スレッド | 独自エンジン / UI・ラスタ別スレッド | **Yoga** / **Dart がメインスレッドで動く。ラスタ無し** |
+| Native views | PlatformView (composited) | **Native views inserted directly into the tree** |
+| Dart ↔ native | MethodChannel (asynchronous) | **Direct `dart:ffi` calls (synchronous)** |
+| Layout / threads | Own engine / separate UI and raster threads | **Yoga** / **Dart runs on the main thread. No raster thread** |
 
-存在しないもの: `MethodChannel` 系、`PlatformView` / `AndroidView` / `UiKitView`、
-`google_mobile_ads` の内部実装（`AdWidget` 等）、`PlatformDispatcher` 前提コード。
-やってはいけないこと: `android/build.gradle` を `.kts` で書く（§5）、Android の pubspec で
-`ffiPlugin: true`（§4）、ネイティブで非同期を挟んだ後にメインへ戻さず Dart を呼ぶ（§6）。
+Things that do not exist: the `MethodChannel` family, `PlatformView` /
+`AndroidView` / `UiKitView`, the internals of `google_mobile_ads` (`AdWidget`
+etc.), anything that assumes `PlatformDispatcher`. Things not to do: write
+`android/build.gradle` as `.kts` (§5), set `ffiPlugin: true` for Android in the
+pubspec (§4), call into Dart after an async hop on the native side without
+returning to main (§6).
 
-`google_mobile_ads` は **公開 API と Native Ads のレイアウト方式は踏襲、内部実装は流用不能**
-（§13）。バナーは DartNative の方が素直 — PlatformView の合成コストと描画不具合が存在しない。
-
----
-
-## 1. 参考にできるネイティブソースは存在しない
-
-SDK 同梱の一次プラグイン 37 個に**ネイティブソースは 1 行も無い**（`<SDK>/` 全体で
-`*.podspec` ゼロ、`*.swift` はアプリ雛形のみ、`*.kt` は Gradle プラグインのみ）。構造は
-`lib/**.dart`（全メソッド `throw UnimplementedError()`）+ `dart/*/*.dill`（コンパイル済み）+
-`pubspec.yaml` + `manifest.json`。**読めるのは pubspec と Dart のシグネチャだけ。**
-実ソースは非公開 `github.com/DartNative/dartnative_plugins`。
-
-裏技: `strings -n 4 <pkg>/dart/debug/<pkg>.dill` で文字列テーブルから呼び出し順とリテラルが拾える。
+From `google_mobile_ads` we **keep the public API and the native-ads layout
+approach; the internals cannot be reused** (§13). Banners are actually simpler
+in DartNative — there is no PlatformView compositing cost and no rendering
+glitches.
 
 ---
 
-## 2. 一次資料リスト
+## 1. There is no native reference source
 
-| 資料 | 重要度 | 内容 |
+The 37 first-party plugins bundled with the SDK contain **not a single line of
+native source** (zero `*.podspec` under `<SDK>/`, the only `*.swift` are app
+templates, the only `*.kt` are Gradle plugins). Their structure is `lib/**.dart`
+(every method `throw UnimplementedError()`) + `dart/*/*.dill` (compiled) +
+`pubspec.yaml` + `manifest.json`. **All you can read is the pubspec and the
+Dart signatures.** The real source is the private
+`github.com/DartNative/dartnative_plugins`.
+
+Trick: `strings -n 4 <pkg>/dart/debug/<pkg>.dill` recovers call order and
+literals from the string table.
+
+---
+
+## 2. Primary sources
+
+| Source | Importance | Content |
 |---|---|---|
-| https://dartnative.com/tutorials/build-a-plugin/ | ★★★ | プラグイン構造・FFI・Swift/Kotlin ブリッジを扱う唯一の公式資料。§14 に確定情報 |
-| https://dartnative.com/tutorials/google-maps/ | ★★★ | ネイティブビュー埋め込み + ネイティブ側 API キー。バナーと同型 |
-| https://dartnative.com/tutorials/publish-your-plugin/ | ★★ | dartpub.dev 公開手順 |
-| `<SDK>/packages/flutter_tools/lib/src/commands/plugin_build.dart` | ★★★ | パッケージング仕様（2000 行超）。podspec / build.gradle の制約はここが正 |
-| `<SDK>/packages/flutter_tools/lib/src/flutter_plugins.dart` (L494-760) | ★★★ | registrant 生成 |
-| `<SDK>/bin/cache/pkg/dartnative/lib/plugin.dart` | ★★★ | **スタブでない唯一の API 定義**。プラグイン作者向け export 一覧 |
-| `…/dartnative/lib/src/reconciler/{mutations,element}.dart` | ★★★ | `ViewType` / `ViewProps` / `PluginMutation` / `NativeElement` の定義 |
-| `<SDK>/packages/flutter_tools/templates/plugin_ffi/` | ★★★ | 実在する唯一の podspec / CMakeLists / build.gradle 雛形（`dn create --template plugin_ffi`） |
-| `dartnative_android.aar` / `libdartnative_android.so` | ★★★ | プロバイダ契約・レジストリ挙動はこれを逆アセンブルして確認（§12） |
+| https://dartnative.com/tutorials/build-a-plugin/ | ★★★ | The only official material covering plugin structure, FFI and the Swift/Kotlin bridges. Confirmed facts in §14 |
+| https://dartnative.com/tutorials/google-maps/ | ★★★ | Embedding a native view + a native-side API key. Same shape as a banner |
+| https://dartnative.com/tutorials/publish-your-plugin/ | ★★ | Publishing to dartpub.dev |
+| `<SDK>/packages/flutter_tools/lib/src/commands/plugin_build.dart` | ★★★ | The packaging spec (2000+ lines). Authoritative on podspec / build.gradle constraints |
+| `<SDK>/packages/flutter_tools/lib/src/flutter_plugins.dart` (L494-760) | ★★★ | Registrant generation |
+| `<SDK>/bin/cache/pkg/dartnative/lib/plugin.dart` | ★★★ | **The only non-stub API definition.** The export list for plugin authors |
+| `…/dartnative/lib/src/reconciler/{mutations,element}.dart` | ★★★ | Definitions of `ViewType` / `ViewProps` / `PluginMutation` / `NativeElement` |
+| `<SDK>/packages/flutter_tools/templates/plugin_ffi/` | ★★★ | The only real podspec / CMakeLists / build.gradle template (`dn create --template plugin_ffi`) |
+| `dartnative_android.aar` / `libdartnative_android.so` | ★★★ | The provider contract and registry behaviour were confirmed by disassembling these (§12) |
 
-参考にした同梱プラグインの pubspec / typedef: `dartnative_firebase`（`pluginClass` 必須の理由）、
-`dartnative_revenuecat`（int64 トークン + JSON ディスパッチャ）、`dartnative_webview`
-（`NativeElement` 最小例）、`dartnative_google_maps`（2 層構成 + API キー）、
-`dartnative_video_player`（`SetFlexAspectRatio` の正規用法）。
-
----
-
-## 3. コールバック方式の候補（確定版は design.md §5-2）
-
-同梱プラグインの方式は 2 つ `[dart-src]`: **A. 関数ポインタ登録**（`dartnative_firebase`）と
-**B. int64 トークン + 単一ディスパッチャ + JSON**（`dartnative_revenuecat`）。AdMob は B
-（`onAdFailedToLoad` のエラー詳細を運べる）。同梱プラグインは `NativeCallable` を
-**使っていない**（grep ゼロ件）。`DnCallbacks.arm()` も存在するが、公式チュートリアルが
-`Pointer.fromFunction` + ディスパッチャスロットを示したので採用（§14-4）。
-
-`plugin.dart` が export するレイアウト mutation は `SetAlignSelf` / `SetFlexAspectRatio` /
-`SetFlexPositionType` / `SetFlexPositionInsets` **のみ**。`mutations.dart` に実在する
-`SetFlexWidth` / `SetFlexHeight` / `SetViewHidden` は非公開 `[dart-src]`
-— ネイティブ広告の高さ指定で効いた制約（design.md §8-6）。
+Bundled plugins whose pubspecs / typedefs were consulted: `dartnative_firebase`
+(why `pluginClass` is required), `dartnative_revenuecat` (int64 token + JSON
+dispatcher), `dartnative_webview` (minimal `NativeElement` example),
+`dartnative_google_maps` (two-layer structure + API key),
+`dartnative_video_player` (the canonical use of `SetFlexAspectRatio`).
 
 ---
 
-## 4. `ffiPlugin` ではなく `pluginClass`（確定版は design.md §4）
+## 3. Callback approaches considered (final form: design.md §5-2)
 
-`dartnative_firebase/pubspec.yaml` の原文 `[dart-src]`:
+The bundled plugins use two approaches `[dart-src]`: **A. function-pointer
+registration** (`dartnative_firebase`) and **B. int64 token + single dispatcher
++ JSON** (`dartnative_revenuecat`). AdMob needs B (it can carry the error
+details for `onAdFailedToLoad`). The bundled plugins **do not use
+`NativeCallable`** (zero grep hits). `DnCallbacks.arm()` also exists, but the
+official tutorial shows `Pointer.fromFunction` + a dispatcher slot, so that was
+adopted (§14-4).
+
+The layout mutations exported by `plugin.dart` are `SetAlignSelf` /
+`SetFlexAspectRatio` / `SetFlexPositionType` / `SetFlexPositionInsets` **only**.
+`SetFlexWidth` / `SetFlexHeight` / `SetViewHidden` exist in `mutations.dart` but
+are not exported `[dart-src]` — the constraint that shaped native ad height
+handling (design.md §8-6).
+
+---
+
+## 4. `pluginClass`, not `ffiPlugin` (final form: design.md §4)
+
+Verbatim from `dartnative_firebase/pubspec.yaml` `[dart-src]`:
 
 > NOT ffiPlugin: an ffi-only Android plugin is never added to GeneratedPluginRegistrant,
 > so DartNativeFirebasePlugin.onAttachedToEngine (which System.loadLibrary's
 > libdartnative_firebase.so) never runs and FCM's reverse-JNI nativeOnTokenRefresh
 > crashes with UnsatisfiedLinkError.
 
-広告イベントはまさにリバース JNI。マニフェストのキー仕様: `registrant.imports` は bare な
-package URI、`registrant.calls` は `;` を含む完全な Dart 文、`flutter:` と `dartnative:` は
-マージされ衝突時は `dartnative:` が勝つ。registrant は `dn pub get` のたびに再生成
-（1 行目が `// GENERATED FILE — DO NOT EDIT BY HAND.` のときのみ上書き）。
+Ad events are exactly that reverse JNI. Manifest key rules: `registrant.imports`
+are bare package URIs, `registrant.calls` are complete Dart statements including
+the `;`, `flutter:` and `dartnative:` are merged with `dartnative:` winning on
+conflict. The registrant is regenerated on every `dn pub get` (overwritten only
+when line 1 is `// GENERATED FILE — DO NOT EDIT BY HAND.`).
 
 ---
 
-## 5. ネイティブ依存の制約（確定版は design.md §9）
+## 5. Native dependency constraints (final form: design.md §9)
 
-- **`build.gradle` は Groovy 限定**: `plugin_build.dart:751` が `androidDir.childFile('build.gradle')`
-  決め打ちで、無ければ Android 成果物を**スキップして null**。依存抽出の正規表現（:800-843）も
-  Groovy 前提。`dn create --template=plugin_ffi` の生成物も Groovy（§14-2）。
-  チュートリアル図の `build.gradle.kts` は表記ミス（§14-5）。
-- **Maven 座標**: バージョン無しは警告付きスキップ（`.aar` に POM が無い）、ファイルを跨ぐ
-  Gradle 変数は `throwToolExit`、BOM は可。
-- **podspec**: ソースは `ios/Classes/`（`.swift .m .mm .c .cc .cpp`）。`s.dependency` を
-  宣言すると "pods" 経路（CocoaPods + `xcodebuild`）になり、`import GoogleMobileAds` は
-  いずれにせよこの経路。consumer podspec には `DEAD_CODE_STRIPPING = NO` が付く
-  （`_PodspecInfo.read` :1723-1768）。
-- **AdMob App ID** はマニフェストマージが無いので利用者が手で設定（`dartnative_google_maps`
-  の API キーと同じ扱い）。
-
----
-
-## 6. スレッドモデルの根拠（確定版は design.md §6）
-
-原文 `[dart-src]`: `dartnative_ios/pubspec.yaml` "Dart runs on the iOS platform (main) thread,
-making all UIKit calls synchronous with no thread hopping" ／ `dartnative/lib/src/core.dart:630-632`
-"rendering is synchronous on the main thread — there is no separate raster thread"。
-
-ただしチュートリアルの実コードは `DispatchQueue.main.async` / `Handler(...).post` を使う
-（§14-6）: 同期呼び出しでは不要、**ネイティブで非同期を挟んだら Dart 発火前に必ずメインへ戻す**。
-調査当初「Android の AdMob リスナーはメインで発火する」と書いたのは Legacy SDK の話で
-**誤り** — Next-Gen は全コールバックがバックグラウンド。
-
-Dart のタイマーはバックグラウンドで止まらない（`core.dart:661-667`）。
+- **`build.gradle` must be Groovy**: `plugin_build.dart:751` hard-codes
+  `androidDir.childFile('build.gradle')`; if absent, the Android artifact is
+  **skipped and null is returned**. The dependency-extraction regexes (:800-843)
+  also assume Groovy. `dn create --template=plugin_ffi` emits Groovy too (§14-2).
+  The tutorial diagram's `build.gradle.kts` is a typo (§14-5).
+- **Maven coordinates**: a versionless coordinate is skipped with a warning (an
+  `.aar` has no POM); a Gradle variable spanning files is a `throwToolExit`;
+  BOMs are fine.
+- **podspec**: sources are `ios/Classes/` (`.swift .m .mm .c .cc .cpp`).
+  Declaring `s.dependency` selects the "pods" path (CocoaPods + `xcodebuild`),
+  and `import GoogleMobileAds` needs that path anyway. The consumer podspec gets
+  `DEAD_CODE_STRIPPING = NO` (`_PodspecInfo.read` :1723-1768).
+- **The AdMob App ID** is set by the user by hand because there is no manifest
+  merge (treated like `dartnative_google_maps`'s API key).
 
 ---
 
-## 7〜10. 設計素案（→ design.md へ統合済み）
+## 6. Evidence for the threading model (final form: design.md §6)
 
-調査時のディレクトリ構成案・実装順序・障壁一覧・未確認事項は `design.md` §3-2 / §10 / §11 / §12
-に確定版がある。調査時に立てて**解消した**問いだけ記す:
+Verbatim `[dart-src]`: `dartnative_ios/pubspec.yaml` — "Dart runs on the iOS
+platform (main) thread, making all UIKit calls synchronous with no thread
+hopping" / `dartnative/lib/src/core.dart:630-632` — "rendering is synchronous on
+the main thread — there is no separate raster thread".
 
-- `dn plugin build` の入力構造 → チュートリアル + スキャフォールドで確定（§14）
-- コールバック方式 → `Pointer.fromFunction` + スロット（§14-4）
-- `google_mobile_ads` からの流用とライセンス → MIT で可（§13-3）
-- iOS 側のプロバイダ契約・`ViewType` 採番・`dartnative_*` 命名・公開のライセンス要件 →
-  **未解決のまま design.md §12 に引き継ぎ**
+The tutorial's actual code nonetheless uses `DispatchQueue.main.async` /
+`Handler(...).post` (§14-6): unnecessary for synchronous calls, but **after any
+async hop on the native side you must return to main before firing into Dart**.
+The early claim that "Android AdMob listeners fire on main" applied to the
+Legacy SDK and is **wrong** — Next-Gen fires every callback on a background
+thread.
 
----
-
-## 11. 開発環境と AI 支援
-
-- DartNative SDK（`dn --version`）、Android SDK 36、iOS は **macOS + Xcode 必須**。
-  無料 Community プランで自作プラグインは開発できる（起動ログ `Launch check ok — tier=free`）。
-  ただしトライアル token の `apps` 許可リストは公式サンプルのみなので、自作アプリでは
-  `dn config --license-key=...` が要る（画面に `No DartNative license found.` が出る）。
-- `dn doctor` / `dn emulators --launch <id>` / `dn run`（r = reload, R = restart）/ `dn plugin build`。
-- 公式 skill `dartnative/dartnative@dart-native`・`@dart-native-porting` は**使う側**の知識で、
-  プラグイン開発（`NativeElement` / `@_cdecl` / JNI / `ViewType` / podspec）は記載ゼロ。
-  その空白を `.claude/skills/dartnative-plugin` が埋め、利用者向けには
-  `skills/dartnative-mobile-ads-usage` を配布する。`dart-use-ffigen`（手書き FFI 非推奨の立場）
-  と Flutter 系 skill は方針が衝突するので入れない。
-- AI に実装させるときは**禁止事項を仕様の冒頭に置く**（§0）。DartNative は学習データに無いため
-  肯定形より「存在しない」という否定形が効く。検証ループ（`dn run` 実機）を最初に確立する。
+Dart timers do not stop in the background (`core.dart:661-667`).
 
 ---
 
-## 12. フォーマット別の実現可否（詳細と根拠）
+## 7–10. Design drafts (→ merged into design.md)
 
-Android AAR の `javap` と `libdartnative_android.so` の `llvm-objdump` で確認。
-**iOS 側は未検証**（読める framework が無い。design.md §12-1）。
+The directory layout proposal, implementation order, obstacle list and open
+items from research time have their final form in design.md §3-2 / §10 / §11 /
+§12. Only the questions raised and **resolved** during research are listed here:
 
-### 12-1. 🟡 Native Ads — ネイティブでレイアウトを書く（Flutter 版と同じ）
+- The input structure for `dn plugin build` → settled by the tutorial plus the
+  scaffold (§14)
+- The callback approach → `Pointer.fromFunction` + slot (§14-4)
+- Reuse from `google_mobile_ads` and licensing → MIT is fine (§13-3)
+- The iOS provider contract, `ViewType` numbering, `dartnative_*` naming and
+  publishing license requirements → **carried over unresolved to design.md §12**
 
-> 初版は「🔴 ブロック」と評価していたが**誤り**。Dart ウィジェットを広告ビューの子にできないのは
-> AdMob SDK 側の要求で、Flutter 公式も "your app — rather than Google Mobile Ads Flutter
-> Plugin — is then responsible for displaying them" と明記し、XML / xib + `NativeAdFactory` を採る。
+---
 
-技術的事実（正しい）`[bytecode]`: プラグインがネイティブ側に持つ interface は 2 メソッドのみ。
+## 11. Development environment and AI assistance
+
+- DartNative SDK (`dn --version`), Android SDK 36, iOS **requires macOS +
+  Xcode**. A plugin of your own can be developed on the free Community plan
+  (startup log `Launch check ok — tier=free`). The trial token's `apps`
+  allowlist covers only the official samples, though, so your own app needs
+  `dn config --license-key=...` (otherwise the screen shows
+  `No DartNative license found.`).
+- `dn doctor` / `dn emulators --launch <id>` / `dn run` (r = reload,
+  R = restart) / `dn plugin build`.
+- The official skills `dartnative/dartnative@dart-native` and
+  `@dart-native-porting` are **consumer-side** knowledge and say nothing about
+  plugin development (`NativeElement` / `@_cdecl` / JNI / `ViewType` / podspec).
+  `.claude/skills/dartnative-plugin` fills that gap, and
+  `skills/google-mobile-ads-kit-usage` is distributed to users.
+  `dart-use-ffigen` (which discourages hand-written FFI) and the Flutter skills
+  conflict with the approach here and are not included.
+- When having an AI implement, **put the prohibitions at the top of the spec**
+  (§0). Because DartNative is not in training data, negative statements ("this
+  does not exist") work better than positive ones. Establish the verification
+  loop (`dn run` on a device) first.
+
+---
+
+## 12. Feasibility per format (details and evidence)
+
+Confirmed with `javap` on the Android AAR and `llvm-objdump` on
+`libdartnative_android.so`. **The iOS side was unverified at research time** (no
+readable framework; design.md §12-1).
+
+### 12-1. 🟡 Native Ads — write the layout natively (same as Flutter)
+
+> The first draft rated this "🔴 blocked", which was **wrong**. The reason a
+> Dart widget cannot be a child of the ad view is a requirement of the AdMob
+> SDK, and Flutter's official plugin says as much — "your app — rather than
+> Google Mobile Ads Flutter Plugin — is then responsible for displaying them" —
+> and uses XML / xib + `NativeAdFactory`.
+
+The technical fact (correct) `[bytecode]`: the interface a plugin has on the
+native side has exactly two methods.
 
 ```java
 public interface com.dartnative.DNAndroidPluginProvider {
-  @Nullable View createView(int);          // null = 自分の種別ではない
+  @Nullable View createView(int);          // null = not my view type
   void handleMutation(long, int, byte[]);
 }
 ```
 
-子ビューを差し込む API が無いことの 3 つの確認: (1) 上記 interface に `insertChild` 相当が無い、
-(2) `NativeElement`（`element.dart:127-148`）に `children` / `replaceChild` のオーバーライドが無く
-`plugin.dart` は子要素機構を公開していない `[dart-src]`、(3) 組み込みコンテナが使う
-`_emitFlexChild()`（`native_elements.dart:21`）は file-private、ネイティブの
-`DNFlexLayout.insertChild` もリコンサイラ内部専用 `[bytecode]`。
+Three confirmations that there is no API for inserting a child view: (1) the
+interface above has nothing like `insertChild`; (2) `NativeElement`
+(`element.dart:127-148`) has no `children` / `replaceChild` override and
+`plugin.dart` exposes no child mechanism `[dart-src]`; (3) the built-in
+containers' `_emitFlexChild()` (`native_elements.dart:21`) is file-private, and
+the native `DNFlexLayout.insertChild` is reconciler-internal `[bytecode]`.
 
-→ 制約が効くのは **Dart → ネイティブ方向だけ**。`NativeAdView` は `FrameLayout` なので
-ネイティブ側で子を組むのは自由。Flutter 版の 2 方式（テンプレート / ファクトリ）をそのまま提供する
-（design.md §8）。❌ Dart レイアウト + 透明 `NativeAdView` の重ね合わせは素材の被覆となり
-ポリシー違反。
+→ The constraint applies **only in the Dart → native direction**. `NativeAdView`
+is a `FrameLayout`, so building children natively is unconstrained. Both of the
+Flutter plugin's routes (template / factory) are offered as-is (design.md §8).
+❌ Overlaying a Dart layout on a transparent `NativeAdView` covers the assets
+and violates policy.
 
-**実装で判明（design.md §5-1）:** `DNPluginRegistry.createView(int)` は登録順に走査して
-**最初の non-null で打ち切る** `[bytecode]`。プレースホルダを返すと後続のプロバイダが
-呼ばれない。
+**Found during implementation (design.md §5-1):**
+`DNPluginRegistry.createView(int)` walks providers in registration order and
+**stops at the first non-null** `[bytecode]`. Return a placeholder and the
+providers after you are never called.
 
-### 12-2. 🟢 全画面フォーマット
+### 12-2. 🟢 Full-screen formats
 
-ビューを扱わないので `createView` も `ViewType.claim()` も不要。SDK が `show(activity)` で
-自前表示。`Activity` は `DNNavigator.activity()` `[bytecode]`。App Open のライフサイクル検知には
-`registerAppLifecycleCallback`（`uikit_bindings.dart:162`）`[dart-src]` が使える（未実装）。
-DartNative 自身の全画面 API（`presentDartSheet` 等）は AdMob では使わない。
+No views involved, so neither `createView` nor `ViewType.claim()` is needed. The
+SDK presents them itself via `show(activity)`. The `Activity` comes from
+`DNNavigator.activity()` `[bytecode]`. `registerAppLifecycleCallback`
+(`uikit_bindings.dart:162`) `[dart-src]` could drive App Open lifecycle
+detection (not implemented). DartNative's own full-screen APIs
+(`presentDartSheet` etc.) are not used for AdMob.
 
-### 12-3. 🟡 Banner（アダプティブ）— intrinsic size は報告できないが回避可能
+### 12-3. 🟡 Banner (adaptive) — no intrinsic size reporting, but avoidable
 
 `DNViewFactory.register(View)` `[bytecode]`:
 
 ```
 27: instanceof    android/view/ViewGroup
-30: ifne          38                     ← ViewGroup ならスキップ
+30: ifne          38                     ← skipped for a ViewGroup
 35: invokestatic  DNFlexLayout.attachIntrinsicMeasure:(JLandroid/view/View;)V
 ```
 
-`attachIntrinsicMeasure` は非 `ViewGroup` にしか、しかもプラグイン経路では**そもそも**呼ばれない。
-再レイアウトを要求する mutation も公開されていない（§3）。`Element.markDirty()` は Dart 要素の
-再ビルド用。
+`attachIntrinsicMeasure` only applies to non-`ViewGroup`s, and on the plugin
+path it is **never called at all**. No mutation requesting a relayout is
+exported either (§3). `Element.markDirty()` is for rebuilding Dart elements.
 
-回避: 広告の高さは**事前に解析的に求まる**。`LayoutBuilder`（`builders.dart:26-31`）で幅を取り、
-ネイティブの `getLargeAnchoredAdaptiveBannerAdSize(ctx, widthDp)` で高さを得て
-`SetFlexAspectRatio(w/h)` を mount 時に emit。`dartnative_video_player` が採る正規の手法
-（`video_player.dart:126-128`）。`stretchAsStackFlowChild => true` と併用。
+Workaround: an ad's height **can be computed analytically in advance**. Take
+the width from `LayoutBuilder` (`builders.dart:26-31`), get the height from the
+native `getLargeAnchoredAdaptiveBannerAdSize(ctx, widthDp)`, and emit
+`SetFlexAspectRatio(w/h)` at mount. This is the canonical technique used by
+`dartnative_video_player` (`video_player.dart:126-128`). Combine with
+`stretchAsStackFlowChild => true`.
 
-### 12-4. 🟠 リスト内バナー — リサイクルによる再リクエスト
+### 12-4. 🟠 Banners in lists — re-requests from recycling
 
-`FastList` / `FastGrid` / `MasonryFastGrid` は `DNFastListBridge$DNFastListAdapter extends
-RecyclerView$Adapter`（`onCreateViewHolder` / `onBindViewHolder` / `onViewRecycled`）による
-**本物のリサイクル** `[bytecode]`。セル `DNCellContainer extends FrameLayout` が
-`clearChildren()` / `swapView()` でビューを着脱する。`keepAliveCount`（`fast_list.dart:238-257`）
-を設定すると可視範囲外の行のコンテンツが**破棄される**（原文 "has its built content disposed"）。
+`FastList` / `FastGrid` / `MasonryFastGrid` do **genuine recycling** through
+`DNFastListBridge$DNFastListAdapter extends RecyclerView$Adapter`
+(`onCreateViewHolder` / `onBindViewHolder` / `onViewRecycled`) `[bytecode]`. The
+cell `DNCellContainer extends FrameLayout` attaches and detaches views with
+`clearChildren()` / `swapView()`. Setting `keepAliveCount`
+(`fast_list.dart:238-257`) **disposes** the content of off-screen rows
+(verbatim: "has its built content disposed").
 
-ホットリスタート時の後始末に使えるフック: `DNViewRegistry.registerResetHook(Function0<Unit>)`
-`[bytecode]` — これが design.md §5-2 の採用根拠。
+A hook usable for hot-restart cleanup:
+`DNViewRegistry.registerResetHook(Function0<Unit>)` `[bytecode]` — the evidence
+behind design.md §5-2.
 
-対策の確定版は design.md §7-4（遅延破棄 + 世代チェック、`keepAliveCount` 非設定、非リサイクル
-コンテナ推奨）。
+The final mitigation is design.md §7-4 (deferred teardown + generation check,
+`keepAliveCount` unset, non-recycling containers recommended).
 
-### 12-5. 画像素材の受け渡し
+### 12-5. Passing image assets
 
-ネイティブ画像ハンドル（`Drawable` / `UIImage`）を Dart に渡す API は無い `[dart-src][bytecode]`
-（`ImageProvider` は Network / Asset / File / Memory の 4 種のみ）。ネイティブ広告は
-テンプレート / ファクトリともネイティブ側で描画するので**この経路は不要になった**。
-参考: Coil / NSCache の共有キャッシュ、`ImageCache.configure`（`image.dart:203-273`）。
+There is no API for handing a native image handle (`Drawable` / `UIImage`) to
+Dart `[dart-src][bytecode]` (`ImageProvider` has only Network / Asset / File /
+Memory). Since native ads are rendered natively in both the template and
+factory routes, **this path is no longer needed**. For reference: the shared
+Coil / NSCache caches, `ImageCache.configure` (`image.dart:203-273`).
 
-### 12-6. ViewType レジストリの実際の挙動 `[disasm]`
+### 12-6. Actual behaviour of the ViewType registry `[disasm]`
 
-`DNViewTypeClaim`（`0xae2ec0`）: **65535 から降順**、下限 60000（`mov w10, #0xea5f`）、
-プロセスグローバル・`std::mutex`・**キーに対して冪等**・解放されない。空文字は `-1`。
-`DNViewFactory.create(int)` は **100 未満を組み込み** `tableswitch`、100 以上を
-`DNPluginRegistry.createView` へ `[bytecode]`。組み込み 31 種のうち Dart の `ViewType`
-定数として公開されるのは `view / label / button / floatingActionButton / shimmer / searchBar`
-の 6 つ（`DNImageView`(6) はプラグインから名指しできない）。
+`DNViewTypeClaim` (`0xae2ec0`): **counts down from 65535**, floor 60000
+(`mov w10, #0xea5f`), process-global, `std::mutex`, **idempotent per key**,
+never released. The empty string yields `-1`. `DNViewFactory.create(int)` treats
+**below 100 as built-in** via `tableswitch` and sends 100 and above to
+`DNPluginRegistry.createView` `[bytecode]`. Of the 31 built-ins, the ones
+exposed as Dart `ViewType` constants are the six `view / label / button /
+floatingActionButton / shimmer / searchBar` (`DNImageView` (6) cannot be named
+from a plugin).
 
-### 12-7. `PluginMutation` の注意点
+### 12-7. `PluginMutation` caveats
 
-`DNPluginRegistry.handleMutation(long, int, byte[])` は**全プロバイダにブロードキャスト**
-`[bytecode]` → `eventTag` は衝突しうる。ペイロード上限は明示的に無い（バッチデコーダに境界
-チェックのみ、オフセット 32bit `[推測]`）。大きなデータは URL / ファイル経由。
+`DNPluginRegistry.handleMutation(long, int, byte[])` is **broadcast to every
+provider** `[bytecode]` → `eventTag` can collide. There is no explicit payload
+limit (only bounds checks in the batch decoder, 32-bit offsets `[inferred]`).
+Large data should go via a URL or file.
 
-### 12-8. SDK ベンダーへの要望候補（優先度低）
+### 12-8. Possible requests to the SDK vendor (low priority)
 
-「Native Ads が実装できない」根拠は取り下げ（Flutter もネイティブで書く）。あれば嬉しい程度:
-プラグインビューへの子マウント API、プラグインビューへの `attachIntrinsicMeasure` 適用
-（汎用の `View.measure()` 経路は `attachIntrinsicMeasure$lambda$4+308` に実装済みで、分岐で
-呼ばれていないだけ）。それより**情報開示**（`dartnative_plugins` へのアクセス、iOS 側の
-プラグイン契約、`dartnative_*` 命名の可否、公開のライセンス要件）を先に依頼すべき。
+The "native ads cannot be implemented" argument is withdrawn (Flutter writes
+them natively too). Nice-to-haves: an API for mounting children into a plugin
+view; applying `attachIntrinsicMeasure` to plugin views (the generic
+`View.measure()` path is already implemented at
+`attachIntrinsicMeasure$lambda$4+308` and merely not reached by the branch).
+More important is **disclosure**: access to `dartnative_plugins`, the iOS
+plugin contract, whether `dartnative_*` naming is allowed, and the license
+requirements for publishing.
 
-### 12-9. 「変換」についての結論
+### 12-9. Conclusion on "conversion"
 
-コード生成（`pigeon` 相当）は不要。同梱プラグインは全て typedef 手書き。実際に要るのは
-2 箇所のマーシャリング — Dart → ネイティブは JSON 文字列（本プラグインでは `PluginMutation`
-の生バイト列すら使わなかった）、ネイティブ → Dart は int64 トークン + JSON。同期の文字列
-読み出しは webview 方式（呼び出し側バッファ + 書き込み長）。
+No code generation (a `pigeon` equivalent) is needed. Every bundled plugin
+hand-writes its typedefs. What is actually required is marshalling in two
+places — Dart → native as JSON strings (this plugin did not even use
+`PluginMutation`'s raw bytes), native → Dart as int64 token + JSON. Synchronous
+string reads follow the webview approach (caller buffer + written length).
 
 ---
 
-## 13. Flutter 互換方針（公開 API 設計の指針）
+## 13. Flutter compatibility policy (guiding the public API design)
 
-### 13-1. エコシステムの明示的な作法 `[dart-src]`
+### 13-1. The ecosystem's explicit convention `[dart-src]`
 
-| プラグイン | 原文 |
+| Plugin | Verbatim |
 |---|---|
 | `dartnative_revenuecat` | "**Drop-in replacement for** RevenueCat's `purchases_flutter`" / "Derived from purchases_flutter by RevenueCat, Inc. (MIT)" |
 | `dartnative_firebase` | "API surface mirrors the original where possible so that migration diffs are [minimal]" |
-| `dartnative_shared_preferences` / `url_launcher` / `path_provider` / `permissions` | いずれも "**Drop-in** replacement" を公言 |
+| `dartnative_shared_preferences` / `url_launcher` / `path_provider` / `permissions` | All declare themselves a "**Drop-in** replacement" |
 
-→ `dartnative_mobile_ads` も `google_mobile_ads` の公開 API を踏襲する。
+→ `google_mobile_ads_kit` follows the public API of `google_mobile_ads` too.
 
-### 13-2. 層ごとの方針
+### 13-2. Policy per layer
 
-クラス名・メソッド名・引数名・enum・リスナー・ファクトリ登録フロー・エラー構造 = ✅ 合わせる。
-内部実装 = ❌ 流用不能。
+Class names, method names, parameter names, enums, listeners, the factory
+registration flow, error structures = ✅ match. Internal implementation = ❌
+cannot be reused.
 
-### 13-3. ライセンス: MIT で問題ない
+### 13-3. License: MIT is fine
 
-`google_mobile_ads` は Apache-2.0 だが、Dart 実装は `instanceManager`（MethodChannel）に
-依存し `load()` 以下が全て別実装、表示側の `AdWidget` も存在しない。一致するのは
-「書き方が 1 通りしかない」フィールド宣言と、AdMob 公式ドキュメントにある定数値だけ
-→ **まとまったコードを転記する場面が発生しない**。`LICENSE` は MIT 一本、`NOTICE` 不要。
-参照先は AdMob 公式ドキュメント（定数・エラーコード）と pub.dev の API リファレンス
-（メソッド名・引数の並び）。上流のソースファイルをまとめてペーストすることだけ避ける。
-pubspec の `description` は "API surface follows google_mobile_ads"（"Based on" ではない）。
-ネイティブ広告テンプレート（上流同梱の Apache-2.0 資産）も同じ理由で書き起こした
-（design.md §8-4）。
+`google_mobile_ads` is Apache-2.0, but its Dart implementation depends on
+`instanceManager` (MethodChannel), everything from `load()` down is implemented
+differently here, and the display side (`AdWidget`) does not exist. What
+matches is only field declarations that can be written one way and constant
+values from the official AdMob documentation → **no situation arises where a
+block of code is transcribed**. `LICENSE` is MIT alone; no `NOTICE`. References
+are the official AdMob docs (constants, error codes) and the pub.dev API
+reference (method names, parameter order). The only thing to avoid is pasting
+upstream source files wholesale. The pubspec `description` says "API surface
+follows google_mobile_ads" (not "Based on"). The native ad templates (Apache-2.0
+assets bundled upstream) were written from scratch for the same reason
+(design.md §8-4).
 
 ---
 
-## 14. 公式チュートリアルからの確定情報 `[tutorial]`
+## 14. Facts confirmed from the official tutorial `[tutorial]`
 
-出典: https://dartnative.com/tutorials/build-a-plugin/（`dartnative_share`）と
-`dn create --template=plugin_ffi` の実行結果。
+Sources: https://dartnative.com/tutorials/build-a-plugin/ (`dartnative_share`)
+and the output of `dn create --template=plugin_ffi`.
 
-### 14-1. ディレクトリ構造
+### 14-1. Directory structure
 
-チュートリアル: `lib/` `ios/Classes/DNShareBridge.swift` `android/src/main/kotlin/…/{DartNativeSharePlugin,ShareBridge}.kt`
-`android/src/main/cpp/share_bridge.cpp` `android/CMakeLists.txt` `android/build.gradle`。
-Kotlin は「プラグインクラス」と「実処理クラス」の 2 ファイル。`CMakeLists.txt` の位置は
-ツール雛形の `src/CMakeLists.txt` を採用（§14-5）。
+Tutorial: `lib/` `ios/Classes/DNShareBridge.swift`
+`android/src/main/kotlin/…/{DartNativeSharePlugin,ShareBridge}.kt`
+`android/src/main/cpp/share_bridge.cpp` `android/CMakeLists.txt`
+`android/build.gradle`. Kotlin is two files: the "plugin class" and the "worker
+class". For the location of `CMakeLists.txt`, the tool template's
+`src/CMakeLists.txt` was adopted (§14-5).
 
-### 14-2. スキャフォールド `dn create --template=plugin_ffi --platforms=android,ios <name>`
+### 14-2. Scaffold: `dn create --template=plugin_ffi --platforms=android,ios <name>`
 
-生成: `lib/<name>.dart`, `lib/<name>_bindings_generated.dart`, `ios/Classes/<name>.c`,
-`ios/<name>.podspec`, `android/build.gradle`, `android/src/main/AndroidManifest.xml`,
-`src/CMakeLists.txt`, `src/<name>.{c,h}`, `ffigen.yaml`。**生成物は Flutter 標準テンプレートのまま**
-— `pubspec` が `flutter:` ブロック + `plugin_platform_interface`、podspec に `s.dependency 'Flutter'`、
-Android が `ffiPlugin: true`、manifest に `package=` 属性（AGP 8 でエラー）、Kotlin も JNI も無し。
-骨組みだけ使い、pubspec / podspec / build.gradle は手で書く。example の pub get は失敗する
-（`dartnative_android` が pub.dev に無い）がプラグイン本体の生成は成功する。
+Generates: `lib/<name>.dart`, `lib/<name>_bindings_generated.dart`,
+`ios/Classes/<name>.c`, `ios/<name>.podspec`, `android/build.gradle`,
+`android/src/main/AndroidManifest.xml`, `src/CMakeLists.txt`, `src/<name>.{c,h}`,
+`ffigen.yaml`. **The output is the stock Flutter template** — the `pubspec` has
+a `flutter:` block + `plugin_platform_interface`, the podspec has
+`s.dependency 'Flutter'`, Android is `ffiPlugin: true`, the manifest has a
+`package=` attribute (an error on AGP 8), and there is no Kotlin and no JNI. Use
+only the skeleton and hand-write pubspec / podspec / build.gradle. The example's
+pub get fails (`dartnative_android` is not on pub.dev) but the plugin itself
+generates fine.
 
-2026-09-15 に本パッケージの `build.gradle` / podspec / CMakeLists / マニフェストを生成物と
-直接比較: AGP 8.11.1・compileSdk 36・NDK 28.2.13676358・minSdk 24・Java 17・
-`../src/CMakeLists.txt`・16k page 対応が一致。差分は全て意図的（design.md §3-2）。
+On 2026-09-15 this package's `build.gradle` / podspec / CMakeLists / manifest
+were compared directly against the generated output: AGP 8.11.1, compileSdk 36,
+NDK 28.2.13676358, minSdk 24, Java 17, `../src/CMakeLists.txt` and 16k page
+support all match. Every difference is deliberate (design.md §3-2).
 
-### 14-3. Android は Kotlin 2 ファイル構成
+### 14-3. Android is two Kotlin files
 
-`DartNativeSharePlugin : FlutterPlugin` は `onAttachedToEngine` で `System.loadLibrary` のみ
-（`JNI_OnLoad` を発火させる）。実処理 `ShareBridge` は JNI から呼ぶので `@Keep` 必須。
-C++ 側は `NewStringUTF` → `CallStaticVoidMethod` → `DeleteLocalRef` →
-**`ExceptionCheck` / `ExceptionClear` を忘れない**。
+`DartNativeSharePlugin : FlutterPlugin` does only `System.loadLibrary` in
+`onAttachedToEngine` (which triggers `JNI_OnLoad`). The worker `ShareBridge` is
+called from JNI, so `@Keep` is mandatory. On the C++ side: `NewStringUTF` →
+`CallStaticVoidMethod` → `DeleteLocalRef` → **never forget `ExceptionCheck` /
+`ExceptionClear`**.
 
-> 実装で判明: `GetStaticMethodID` 失敗も例外を pending にし、**次の JNI 呼び出しでプロセスが
-> abort する**（`JNI DETECTED ERROR ... called with pending exception`）。メソッド ID 解決ごとに
-> `ExceptionClear` する `FindMethod` を置いた（design.md §11）。
+> Found during implementation: a failed `GetStaticMethodID` also leaves an
+> exception pending, and **the process aborts on the next JNI call**
+> (`JNI DETECTED ERROR ... called with pending exception`). A `FindMethod` helper
+> that calls `ExceptionClear` after every method ID lookup was added
+> (design.md §11).
 
-### 14-4. ✅ コールバックは `Pointer.fromFunction` + ディスパッチャスロット方式
+### 14-4. ✅ Callbacks use `Pointer.fromFunction` + a dispatcher slot
 
-「`NativeCallable` か `Pointer.fromFunction` か」に決着。チュートリアルの原則:
-**コールバックアドレスをキャッシュしない。** Dart で 1 つだけ作る → 一度だけ渡す →
-スロットに格納 → **発火直前に毎回読み直して非ゼロ確認** → フレームワークが旧 isolate 破棄前に
-ゼロクリア。iOS 側は `UnsafeMutablePointer<Int64>` のスロット + `DispatchQueue.main.async`。
+This settled "`NativeCallable` or `Pointer.fromFunction`?". The tutorial's
+principle: **never cache the callback address.** Create exactly one in Dart →
+pass it once → store it in a slot → **re-read and check for non-zero
+immediately before every fire** → the framework zeroes it before tearing down
+the old isolate. On iOS the slot is an `UnsafeMutablePointer<Int64>` plus
+`DispatchQueue.main.async`.
 
-Android 側についてチュートリアルは**世代カウンタ**を併用するとしていた:
+For Android the tutorial said to combine this with a **generation counter**:
 
-> **⚠️ 実装で覆った（2026-09-15）。** エンジンは `nativeIsolateGen()` に相当するシンボルを
-> エクスポートしていない — `DNRegisterAsyncDispatcherSlot` は `.so` に無く、`DN_IsolateGen`
-> は逆アセンブルするとメモリ解放コードでゲッターではない `[disasm]`。実在する仕組みは
-> **`DNViewRegistry.registerResetHook`** `[bytecode]`（§12-4）で、旧 isolate 破棄の直前に
-> フックが呼ばれるのでそこでスロットをゼロにする。採用形は design.md §5-2 /
-> `.claude/skills/dartnative-plugin/SKILL.md` §4。
+> **⚠️ Overturned by implementation (2026-09-15).** The engine exports no symbol
+> corresponding to `nativeIsolateGen()` — `DNRegisterAsyncDispatcherSlot` is not
+> in the `.so`, and `DN_IsolateGen` disassembles to memory-freeing code, not a
+> getter `[disasm]`. The mechanism that exists is
+> **`DNViewRegistry.registerResetHook`** `[bytecode]` (§12-4): the hook is called
+> just before the old isolate is destroyed, and the slot is zeroed there. The
+> adopted form is design.md §5-2 / `.claude/skills/dartnative-plugin/SKILL.md` §4.
 
 ```kotlin
-// ❌ 記録のみ。nativeIsolateGen は存在せずコンパイルできない。
+// ❌ For the record only. nativeIsolateGen does not exist and this does not compile.
 @Volatile private var dispatcherGen: Long = 0L
 fun setDispatcher(ptr: Long) { dispatcherPtr = ptr; dispatcherGen = nativeIsolateGen() }
 // deliver: if (dispatcherGen != nativeIsolateGen()) return@post
 ```
 
-`token`(Int64) + `status`(Int32) + JSON(`Pointer<Utf8>`) のシグネチャはそのまま採用した。
+The `token` (Int64) + `status` (Int32) + JSON (`Pointer<Utf8>`) signature was
+adopted as-is.
 
-### 14-5. ⚠️ チュートリアルとツール実装の食い違い
+### 14-5. ⚠️ Where the tutorial and the tooling disagree
 
-| 項目 | チュートリアル | ツール実装 / 実物 | 採用 |
+| Item | Tutorial | Tooling / reality | Adopted |
 |---|---|---|---|
-| Android の Gradle | `build.gradle.kts` | `plugin_build.dart:751` は `build.gradle` 決め打ち。雛形も同じ | **Groovy `build.gradle`** |
-| スレッド | `DispatchQueue.main.async` / `Handler.post` を使用 | pubspec は "no thread hopping" | §14-6（両立する） |
-| `CMakeLists.txt` の位置 | `android/` 直下 | 雛形は `src/CMakeLists.txt`、`build.gradle.tmpl` は `../src/CMakeLists.txt` | **`src/`（プラグイン直下）** |
+| Android Gradle | `build.gradle.kts` | `plugin_build.dart:751` hard-codes `build.gradle`; the template agrees | **Groovy `build.gradle`** |
+| Threading | Uses `DispatchQueue.main.async` / `Handler.post` | The pubspec says "no thread hopping" | §14-6 (both are true) |
+| Location of `CMakeLists.txt` | Directly under `android/` | The template has `src/CMakeLists.txt`; `build.gradle.tmpl` points at `../src/CMakeLists.txt` | **`src/` (plugin root)** |
 
-### 14-6. スレッドモデルの補足
+### 14-6. Threading model, supplementary
 
-「`DispatchQueue.main.async` は不要」は Dart → ネイティブの同期呼び出しに限った話。
-ネイティブ側で非同期を挟む場合と、Dart のコールバックを発火する箇所は**必ずメイン**。
-Android Next-Gen は全コールバックがバックグラウンドなのでホップは常に必須（design.md §6）。
+"`DispatchQueue.main.async` is unnecessary" applies only to synchronous Dart →
+native calls. Wherever native does something asynchronous, and wherever a Dart
+callback is fired, **always be on main**. Android Next-Gen fires every callback
+in the background, so the hop is always required there (design.md §6).
 
-### 14-7. 命名規約（確定）
+### 14-7. Naming conventions (settled)
 
-`dartnative_<name>` / `com.dartnative.<name>` / `DartNative<Name>Plugin` / C シンボル `DN<Name><Verb>` /
-pod 名はパッケージ名 / `lib<package>.so`。チュートリアル自身が `dartnative_share` を名乗る
-ので、サードパーティが `dartnative_*` を名乗る前提の記述。ただし `dn_first_party.json`
-（一次プラグイン許可リスト）との関係は未確認（design.md §12-3）。
+`dartnative_<name>` / `com.dartnative.<name>` / `DartNative<Name>Plugin` /
+C symbols `DN<Name><Verb>` / pod name = package name / `lib<package>.so`. The
+tutorial itself is named `dartnative_share`, so the text assumed third parties
+may use `dartnative_*`. The relationship to `dn_first_party.json` (the
+first-party allowlist) was unconfirmed at the time (design.md §12-3).
 
-### 14-8. 開発フロー
+**Addendum, 2026-09**: third parties **may not** use the `dartnative_` prefix.
+This package was renamed to `google_mobile_ads_kit` / `GoogleMobileAdsKitPlugin`
+/ C symbols `GMAK<Verb>` / Swift types `GMAK*` / Android resources
+`gmak_native_*` (see the table in design.md §3). Only the Android package
+`com.cafelafe.google_mobile_ads_kit` was left as-is, to avoid touching the JNI
+symbol names.
 
-`dn create .`（既存ディレクトリに iOS/Android シェルを追加）→ `dn run` → `dn plugin build`
-（`dist/<name>-<version>.tar.gz`）→ `dn plugin publish` / `dn plugin sync`（README + example 再 push）。
+### 14-8. Development flow
 
-### 14-9. チュートリアルでも判明しなかったこと
+`dn create .` (adds the iOS/Android shells to an existing directory) → `dn run`
+→ `dn plugin build` (`dist/<name>-<version>.tar.gz`) → `dn plugin publish` /
+`dn plugin sync` (re-pushes README + example).
 
-`CMakeLists.txt` / podspec の DartNative 用の完全な内容（雛形は Flutter 用。
-`s.dependency 'Flutter'` を外すべきかは macOS で未検証 — design.md §12-6）、
-iOS 側のプラグインプロバイダ契約（`dartnative_share` はビューを持たない — design.md §12-1）。
+### 14-9. What the tutorial still did not answer
+
+The complete DartNative-specific contents of `CMakeLists.txt` / the podspec
+(the template is for Flutter; whether `s.dependency 'Flutter'` should be removed
+was unverified on macOS — design.md §12-6), and the iOS plugin provider
+contract (`dartnative_share` has no view — design.md §12-1).

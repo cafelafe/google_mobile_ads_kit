@@ -1,4 +1,4 @@
-package com.dartnative.dartnative_mobile_ads_example
+package com.cafelafe.google_mobile_ads_kit_example
 
 import com.dartnative.runtime.DartNativeActivity
 

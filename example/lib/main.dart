@@ -1,7 +1,7 @@
 import 'dart:io' show Platform;
 
 import 'package:dartnative/dartnative.dart';
-import 'package:dartnative_mobile_ads/dartnative_mobile_ads.dart';
+import 'package:google_mobile_ads_kit/google_mobile_ads_kit.dart';
 
 import 'dartnative_plugin_registrant.dart';
 

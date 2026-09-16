@@ -1,11 +1,11 @@
-name: dartnative_mobile_ads
+name: google_mobile_ads_kit
 description: >
   Google Mobile Ads (AdMob) for DartNative apps (iOS + Android).
   Wraps the native Google Mobile Ads SDKs via pure FFI — zero Flutter platform channels.
   API surface follows google_mobile_ads for easy migration.
 version: 0.1.0
-homepage: https://github.com/cafelafe/dartnative_mobile_ads
-repository: https://github.com/cafelafe/dartnative_mobile_ads
+homepage: https://github.com/cafelafe/google_mobile_ads_kit
+repository: https://github.com/cafelafe/google_mobile_ads_kit
 
 environment:
   sdk: ^3.12.0-192.0.dev
@@ -28,15 +28,15 @@ dartnative:
         ffiPlugin: true
       android:
         # NOT ffiPlugin: an ffi-only Android plugin is never added to
-        # GeneratedPluginRegistrant, so DartNativeMobileAdsPlugin.onAttachedToEngine
-        # (which System.loadLibrary's libdartnative_mobile_ads.so) never runs and
+        # GeneratedPluginRegistrant, so GoogleMobileAdsKitPlugin.onAttachedToEngine
+        # (which System.loadLibrary's libgoogle_mobile_ads_kit.so) never runs and
         # the ad callbacks' reverse-JNI crashes with UnsatisfiedLinkError.
         # Declaring pluginClass registers the plugin (the .so is still built by the
         # module's own CMakeLists). Mirrors dartnative_firebase / dartnative_webview.
-        package: com.dartnative.mobile_ads
-        pluginClass: DartNativeMobileAdsPlugin
+        package: com.cafelafe.google_mobile_ads_kit
+        pluginClass: GoogleMobileAdsKitPlugin
   registrant:
     imports:
-      - package:dartnative_mobile_ads/dartnative_mobile_ads.dart
+      - package:google_mobile_ads_kit/google_mobile_ads_kit.dart
     calls:
       - initializeMobileAdsPlugin();
